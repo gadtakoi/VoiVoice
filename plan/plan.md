@@ -1021,6 +1021,7 @@ VoiVoice/
 - [ ] Toast-уведомления Windows (ошибки, статус моделей)
 - [ ] Контекстное меню tray: пауза, язык, cleanup-режим, шумоподавление
 - [ ] Установщик / `.bat` для запуска
+- [ ] **Документация:** README + docs/ (configuration, troubleshooting, API, FAQ)
 - [ ] README с инструкцией по установке
 
 ### Phase 5: Advanced Features (v2)
@@ -1227,7 +1228,92 @@ services:
 
 ---
 
-## 13. Следующий шаг
+## 13. Документация
+
+Подробная документация — обязательный deliverable проекта, не откладываемый «на потом».
+
+### 13.1 Структура документации
+
+```
+VoiVoice/
+├── README.md              # ← Корневой README: главный вход в проект
+├── docs/
+│   ├── configuration.md   # Подробное описание всех опций config.yaml
+│   ├── architecture.md    # Архитектурная схема, компоненты, pipeline
+│   ├── troubleshooting.md # Решение типичных проблем
+│   ├── api.md             # API reference (Client ↔ Gateway, Gateway ↔ Services)
+│   ├── models.md          # Выбор моделей: tiny/base/small, 1B/3B, INT8/Q4_K_M
+│   ├── faq.md             # Частые вопросы
+│   └── CHANGELOG.md       # История изменений
+```
+
+### 13.2 Содержание по файлам
+
+**`README.md`** (корень проекта — первое, что видит пользователь на GitHub)
+- Заголовок + 1-2 предложения: что делает VoiVoice
+- Бейджи: Python 3.14+, Windows, Docker, License
+- Системные требования (Windows 10+, Docker Desktop + WSL2, RAM, CPU)
+- Быстрая установка — **3 шага**:
+  1. `git clone ...`
+  2. `docker-compose up -d`
+  3. `python -m src.client.main`
+- Гифка или скриншот работы (hotkey → голос → текст в Notepad)
+- Краткое описание ключевых фич (local-only, CPU, bilingual)
+- Ссылка на полную документацию в `docs/`
+- Ссылка на `docs/faq.md` для сомневающихся
+
+**`docs/configuration.md`**
+- Полное описание каждой секции `config.yaml`:
+  - `hotkey` — как задать комбинацию, hold vs toggle mode
+  - `audio` — sample_rate, VAD threshold, silence_timeout
+  - `services` — выбор моделей ASR/LLM, URL сервисов
+  - `cleanup_mode` — когда какой режим выбрать
+  - `noise_reduction` — RNNoise vs none
+  - `toasts`, `audio_feedback`, `timing` — настройка UX
+- Примеры config для разных сценариев:
+  - «Слабый ноутбук» (tiny + 1B + languagetool + no RNNoise)
+  - «Максимум качества» (small + 3B + both cleanup + RNNoise)
+  - «Только ASR» (no cleanup, fastest latency)
+
+**`docs/troubleshooting.md`**
+| Симптом | Причина | Решение |
+|---------|---------|---------|
+| Иконка не появляется в трее | Клиент упал при старте | Смотреть `logs/client_*.log` |
+| «Сервисы недоступны» | Docker не запущен | `docker-compose up -d` |
+| Микрофон не найден | PyAudio / драйверы | Проверить устройства в Windows |
+| Текст вставляется медленно | CPU перегружен | Переключиться на tiny + 1B |
+| Не работает hotkey | Конфликт с другим ПО | Сменить комбинацию в config.yaml |
+| Whisper не распознаёт русский | Неверный language | Установить `language: ru` |
+
+**`docs/api.md`**
+- Полная спецификация endpoints (`/api/v1/transcribe`, `/health`)
+- Примеры запросов/ответов `curl`
+- Коды ошибок и их значения
+- WebSocket (если появится streaming в v2)
+
+**`docs/models.md`**
+- Сравнительная таблица моделей ASR (tiny/base/small) по точности/latency/RAM
+- Сравнительная таблица LLM (1B/3B) по качеству cleanup/latency/RAM
+- Рекомендации по выбору под железо
+
+**`docs/faq.md`**
+- «Почему не Google Speech API?» — privacy, локальность
+- «Можно ли без Docker?» — нет, ASR/LLM требуют изоляции
+- «Работает ли на Windows 7?» — нет, Python 3.14+
+- «Поддерживает ли macOS?» — нет, Windows-only
+
+### 13.3 Когда писать
+
+| Phase | Что документировать |
+|-------|---------------------|
+| **Phase 0** | README (скелет), architecture.md (схема) |
+| **Phase 1-2** | api.md, models.md |
+| **Phase 3** | configuration.md (по мере добавления опций) |
+| **Phase 4** | troubleshooting.md, faq.md, CHANGELOG, финальный README |
+
+---
+
+## 14. Следующий шаг
 
 Перейти к **Phase 0** — создать `docker-compose.yml`, FastAPI Gateway, базовый скелет клиента и проверить end-to-end
 связность.
