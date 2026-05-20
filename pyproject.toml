@@ -1,5 +1,40 @@
 [project]
 name = "voivoice"
 version = "0.1.0"
+description = "System-wide AI voice dictation for Windows"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "sounddevice>=0.5",
+    "numpy>=2.0",
+    "pystray>=0.19",
+    "pillow>=10.0",
+    "keyboard>=0.13",
+    "pynput>=1.7",
+    "httpx[http2]>=0.27",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "pyyaml>=6.0",
+    "onnxruntime>=1.18",
+    "loguru>=0.7",
+    "structlog>=24.0",
+    "windows-toasts>=1.0; platform_system=='Windows'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-mock>=3.14",
+    "respx>=0.21",
+    "freezegun>=1.4",
+    "hypothesis>=6.0",
+    "pytest-cov>=5.0",
+    "pytest-benchmark>=4.0",
+    "pytest-timeout>=2.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+timeout = 30
+addopts = "--cov=src --cov-report=term-missing"

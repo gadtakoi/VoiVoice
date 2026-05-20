@@ -262,3 +262,9 @@ cython_debug/
 /.idea/inspectionProfiles/Project_Default.xml
 /.idea/vcs.xml
 /.idea/VoiVoice.iml
+
+# VoiVoice specific
+logs/
+models/ollama/
+models/whisper/
+
