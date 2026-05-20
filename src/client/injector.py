@@ -1,6 +1,5 @@
 import time
 import ctypes
-from typing import Optional
 from loguru import logger
 
 

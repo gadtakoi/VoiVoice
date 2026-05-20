@@ -1,4 +1,3 @@
-import threading
 from typing import Callable, Optional, Set
 from loguru import logger
 
