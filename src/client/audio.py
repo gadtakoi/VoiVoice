@@ -76,35 +76,108 @@ class AudioCapture:
         self._buffer: list[np.ndarray] = []
         self._recording = False
         self._stream: Optional[sd.InputStream] = None
+        self._actual_sample_rate: int = sample_rate
         self._vad: Optional[SileroVAD] = None
         try:
             self._vad = SileroVAD(threshold=vad_threshold)
         except Exception as exc:
             logger.warning("vad_init_failed", error=str(exc))
 
+    def _resample(self, audio: np.ndarray, orig_sr: int, target_sr: int) -> np.ndarray:
+        """Fast linear resample using numpy interp."""
+        if orig_sr == target_sr:
+            return audio
+        audio_float = audio.astype(np.float32)
+        duration = len(audio_float) / orig_sr
+        target_len = int(duration * target_sr)
+        old_x = np.linspace(0, 1, len(audio_float))
+        new_x = np.linspace(0, 1, target_len)
+        if audio_float.ndim == 1:
+            resampled = np.interp(new_x, old_x, audio_float)
+        else:
+            resampled = np.zeros((target_len, audio_float.shape[1]), dtype=np.float32)
+            for ch in range(audio_float.shape[1]):
+                resampled[:, ch] = np.interp(new_x, old_x, audio_float[:, ch])
+        return resampled.astype(audio.dtype)
+
     def _callback(self, indata: np.ndarray, frames: int, time_info, status):
         if status:
             logger.warning("audio_stream_status", status=str(status))
-        if self._recording:
-            self._buffer.append(indata.copy())
+        if not self._recording:
+            return
+        # Convert float32 stereo to int16 mono if needed
+        audio = indata.copy()
+        if audio.dtype == np.float32:
+            audio = (audio * np.iinfo(np.int16).max).astype(np.int16)
+        if audio.ndim > 1 and audio.shape[1] > 1:
+            audio = audio.mean(axis=1, dtype=np.int16)
+        self._buffer.append(audio)
 
     def start(self):
         if self._recording:
             return
         self._buffer = []
         self._recording = True
+        self._actual_sample_rate = self.sample_rate
         if self._vad:
             self._vad.reset()
         blocksize = int(self.sample_rate * self.chunk_duration_ms / 1000)
-        self._stream = sd.InputStream(
-            samplerate=self.sample_rate,
-            channels=self.channels,
-            dtype=self.dtype,
-            blocksize=blocksize,
-            callback=self._callback,
-        )
+        try:
+            self._stream = sd.InputStream(
+                samplerate=self.sample_rate,
+                channels=self.channels,
+                dtype=self.dtype,
+                blocksize=blocksize,
+                callback=self._callback,
+            )
+        except Exception as exc:
+            # Fallback 1: let PortAudio choose blocksize automatically.
+            logger.warning("audio_stream_blocksize_fallback", error=str(exc))
+            try:
+                self._stream = sd.InputStream(
+                    samplerate=self.sample_rate,
+                    channels=self.channels,
+                    dtype=self.dtype,
+                    blocksize=None,
+                    callback=self._callback,
+                )
+            except Exception as exc2:
+                # Fallback 2: use device's default samplerate.
+                logger.warning("audio_stream_samplerate_fallback", error=str(exc2))
+                try:
+                    self._stream = sd.InputStream(
+                        channels=self.channels,
+                        dtype=self.dtype,
+                        blocksize=None,
+                        callback=self._callback,
+                    )
+                    self._actual_sample_rate = int(self._stream.samplerate)
+                except Exception as exc3:
+                    # Fallback 3: some devices require stereo or float32.
+                    logger.warning("audio_stream_format_fallback", error=str(exc3))
+                    try:
+                        self._stream = sd.InputStream(
+                            channels=2,
+                            dtype="float32",
+                            blocksize=None,
+                            callback=self._callback,
+                        )
+                        self._actual_sample_rate = int(self._stream.samplerate)
+                    except Exception as exc4:
+                        self._recording = False
+                        raise RuntimeError(
+                            f"Не удалось открыть микрофон. Самая вероятная причина: "
+                            f"нет прав доступа (Параметры Windows → Конфиденциальность → Микрофон). "
+                            f"Также возможно: микрофон занят другим приложением, "
+                            f"или устройство не поддерживает {self.sample_rate} Гц. "
+                            f"Ошибки: {exc}; {exc2}; {exc3}; {exc4}"
+                        ) from exc4
         self._stream.start()
-        logger.info("audio_capture_started", sample_rate=self.sample_rate)
+        logger.info(
+            "audio_capture_started",
+            sample_rate=self.sample_rate,
+            actual_sample_rate=self._actual_sample_rate,
+        )
         if self.on_state_change:
             self.on_state_change("listening")
 
@@ -124,6 +197,13 @@ class AudioCapture:
             return None
 
         audio = np.concatenate(self._buffer, axis=0)
+        if self._actual_sample_rate != self.sample_rate:
+            logger.info(
+                "audio_resampling",
+                from_sr=self._actual_sample_rate,
+                to_sr=self.sample_rate,
+            )
+            audio = self._resample(audio, self._actual_sample_rate, self.sample_rate)
         wav_bytes = self._encode_wav(audio)
         duration_ms = int(len(audio) / self.sample_rate * 1000)
         logger.info("audio_capture_stopped", duration_ms=duration_ms, samples=len(audio))

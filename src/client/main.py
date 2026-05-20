@@ -135,6 +135,7 @@ class VoiVoiceClient:
             logger.error("audio_start_failed", error=str(exc))
             self.beacon.error()
             self.tray.set_state(TrayState.ERROR)
+            self.toast.show("VoiVoice", f"🎤 Ошибка микрофона: {exc}")
 
     def _on_hotkey_release(self):
         if not self.audio.is_recording:
@@ -263,6 +264,7 @@ class VoiVoiceClient:
         finally:
             self.hotkey.stop()
             self.tray.stop()
+            self.toast.stop()
             self.timing.close()
             await self.api.close()
             logger.info("client_stopped")
