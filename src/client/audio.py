@@ -7,10 +7,16 @@ import onnxruntime as ort
 from loguru import logger
 
 
+import os
+
 class SileroVAD:
     """Simple ONNX Silero VAD wrapper."""
 
-    def __init__(self, model_path: str = "models/silero_vad.onnx", threshold: float = 0.5):
+    _DEFAULT_MODEL = os.path.join(os.path.dirname(__file__), "..", "..", "models", "silero_vad.onnx")
+
+    def __init__(self, model_path: str = None, threshold: float = 0.5):
+        if model_path is None:
+            model_path = self._DEFAULT_MODEL
         self.threshold = threshold
         self.session = ort.InferenceSession(model_path)
         self.h = np.zeros((2, 1, 64), dtype=np.float32)

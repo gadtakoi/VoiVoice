@@ -5,22 +5,29 @@ Phases 1-4: voice capture → ASR → LLM cleanup → text injection + polish.
 """
 
 import sys
+from pathlib import Path
+
+# Ensure project root is in sys.path for both `python -m src.client.main`
+# and `python src/client/main.py` launch modes.
+_project_root = Path(__file__).resolve().parents[2]
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
 import time
 import asyncio
 import threading
-from pathlib import Path
 
 from loguru import logger
 
-from config import Config
-from api_client import APIClient
-from tray import TrayController, TrayState
-from audio import AudioCapture
-from hotkey import HotkeyController
-from injector import TextInjector
-from beacon import AudioBeacon
-from timing import TimingLogger
-from toast import ToastNotifier
+from src.client.config import Config
+from src.client.api_client import APIClient
+from src.client.tray import TrayController, TrayState
+from src.client.audio import AudioCapture
+from src.client.hotkey import HotkeyController
+from src.client.injector import TextInjector
+from src.client.beacon import AudioBeacon
+from src.client.timing import TimingLogger
+from src.client.toast import ToastNotifier
 
 
 class VoiVoiceClient:

@@ -268,3 +268,4 @@ logs/
 models/ollama/
 models/whisper/
 
+!/models/
