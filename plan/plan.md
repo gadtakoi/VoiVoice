@@ -98,7 +98,8 @@ toast-уведомления Windows, звуковые бейконы (коро�
 [2026-05-21 09:15:42] Phase 1, шаг 2: VAD интеграция (Silero ONNX)
 ```
 
-Каждый пункт из чек-листа фазы (например, «Реализация `audio.py`» или «System Tray: иконка + меню») оформляется как отдельная запись с номером шага внутри фазы. По завершении всех шагов фиксируется завершение фазы целиком.
+Каждый пункт из чек-листа фазы (например, «Реализация `audio.py`» или «System Tray: иконка + меню») оформляется как
+отдельная запись с номером шага внутри фазы. По завершении всех шагов фиксируется завершение фазы целиком.
 
 ---
 
@@ -1324,11 +1325,217 @@ services:
 
 ---
 
-## 13. Документация
+## 13. Стратегия тестирования
+
+> **Принцип:** тесты пишутся параллельно с кодом (TDD где возможно), не откладываются «на потом». Каждый модуль клиента
+> и каждый endpoint API Gateway покрывается тестами до перехода к следующей фазе.
+
+### 13.1 Пирамида тестов
+
+```
+        /\
+       /  \     E2E / Ручные (Windows GUI, микрофон)
+      /----\    — редкие, перед релизом
+     /      \
+    /--------\   Integration (Docker-сервисы, HTTP)
+   /          \  — каждый PR
+  /------------\
+ /   Unit tests \ — каждый коммит (pytest, < 1s)
+/________________\
+```
+
+**Целевое покрытие (pytest-cov):**
+
+- `src/client/` — ≥ 80 %
+- `src/server/` (API Gateway) — ≥ 90 %
+- `src/client/main.py` (glue-код) — ≥ 60 %
+
+### 13.2 Инструменты
+
+| Инструмент                      | Назначение                                            |
+|---------------------------------|-------------------------------------------------------|
+| `pytest` + `pytest-asyncio`     | Запуск async-тестов                                   |
+| `pytest-mock` / `unittest.mock` | Моки внешних зависимостей                             |
+| `respx`                         | Мок HTTP-запросов `httpx` (ASR/LLM/LT)                |
+| `freezegun`                     | Фиксация времени для retry / circuit breaker          |
+| `hypothesis`                    | Property-based тесты (config parsing, audio chunking) |
+| `pytest-cov`                    | Отчёт покрытия                                        |
+| `pytest-benchmark`              | Микробенчмарки (VAD, форматирование WAV)              |
+| `pytest-timeout`                | Принудительный таймаут висячих тестов                 |
+
+### 13.3 Структура тестов
+
+```
+tests/
+├── conftest.py              # Фикстуры (tmp_path, event_loop, mock_config)
+├── unit/
+│   ├── client/
+│   │   ├── test_config.py       # Валидация pydantic-settings, default values
+│   │   ├── test_audio.py        # Audio buffer, WAV encode, chunking, VAD trigger
+│   │   ├── test_hotkey.py       # keyboard / pynput wrapper, hold-to-record state machine
+│   │   ├── test_tray.py         # Tray state transitions, menu actions
+│   │   ├── test_injector.py     # SendInput mock (ctypes), clipboard fallback
+│   │   ├── test_api_client.py   # httpx client, retry, circuit breaker, trace_id
+│   │   └── test_beacon.py       # Sine wave generation, frequency / duration
+│   └── server/
+│       ├── test_gateway.py      # FastAPI endpoints, validation, error handlers
+│       └── test_health.py       # /health агрегирует статус всех бэкендов
+├── integration/
+│   ├── test_docker_services.py  # Подъём docker-compose, healthchecks
+│   ├── test_asr_pipeline.py     # WAV → ASR → raw transcript (без LLM)
+│   ├── test_cleanup_pipeline.py # ASR → LLM / LanguageTool / both / none
+│   ├── test_end_to_end.py       # Полный pipeline: audio file → final text
+│   └── test_failover.py         # Падение сервиса, retry, fallback на raw
+├── fixtures/
+│   ├── audio/
+│   │   ├── ru_hello_16k.wav     # 3 сек, русский, чистая речь
+│   │   ├── en_hello_16k.wav     # 3 сек, английский
+│   │   ├── ru_noise_16k.wav     # речь + фоновый шум (для RNNoise)
+│   │   ├── silence_16k.wav      # 5 сек тишины (VAD negative test)
+│   │   └── long_phrase_16k.wav  # 35 сек (edge case > 30s)
+│   └── responses/
+│       ├── asr_ru.json          # Мок-ответ Whisper (ru)
+│       ├── asr_en.json          # Мок-ответ Whisper (en)
+│       ├── llm_cleanup.json     # Мок-ответ Ollama cleanup
+│       └── languagetool.json    # Мок-ответ LT matches
+└── e2e/
+    └── test_windows_gui.py      # Запускаются вручную на Windows (не в CI)
+```
+
+### 13.4 Unit-тесты по модулям
+
+#### `config.py`
+
+- Валидация всех полей `config.yaml` (граничные значения: `silence_timeout_ms = 0`, отрицательные порты).
+- Подгрузка из переменных окружения (`VOIVOICE_AUDIO_SAMPLE_RATE`).
+- Fallback на дефолты при отсутствии файла.
+- Property-based: `hypothesis` генерирует случайные валидные/невалидные YAML.
+
+#### `audio.py`
+
+- **Buffer:** накопление chunks, корректный размер при `dtype=int16`.
+- **WAV encode:** заголовок WAV валиден (pytest-benchmark замеряет время кодирования 30s audio).
+- **VAD (Silero ONNX):** мок `onnxruntime.InferenceSession`, проверка threshold логики.
+- **Silence timeout:** если VAD не детектит речь N мс — запись останавливается.
+- **Edge cases:** пустой буфер, буфер > 60 сек (должен обрезаться или ошибка).
+
+#### `hotkey.py`
+
+- **State machine:** `Idle → Listening → Processing → Idle` при корректном hold/release.
+- **Timeout:** удержание > 60 сек → принудительный `stop_recording()` + `Error` state.
+- **Backend switch:** параметризованные тесты `keyboard` vs `pynput`.
+- **Conflict:** двойное нажатие (press без release предыдущего) — игнор или сброс.
+
+#### `tray.py`
+
+- **State transitions:** все 10 состояний меняются корректно, иконки загружаются без падения при отсутствии файла.
+- **Menu actions:** `Quit` вызывает graceful shutdown (mock `sys.exit`), `Settings` открывает `config.yaml`.
+- **Tooltip:** динамический текст соответствует текущему `TrayState`.
+
+#### `injector.py`
+
+- **SendInput:** мок `ctypes.windll.user32.SendInput`, проверка что строка разбивается на `INPUT` структуры корректно (
+  юникод, surrogate pairs).
+- **Clipboard fallback:** мок `win32clipboard`, проверка что `OpenClipboard` / `CloseClipboard` всегда балансируются (
+  даже при исключении).
+- **Special keys:** проверка обработки `\n`, `\t` — вставляются как нажатия Enter / Tab, а не литералы.
+
+#### `api_client.py`
+
+- **Retry:** 3 попытки с exponential backoff при `ConnectError`, затем `CircuitBreakerOpen`.
+- **Circuit breaker:** 5 ошибок подряд → 30 секунд `Open`, затем `Half-Open`.
+- **Trace ID:** UUID4 пропагируется в заголовок `X-Trace-ID` на каждый запрос.
+- **Timeout:** `timeout=10.0` на `/transcribe`, `timeout=30.0` на `/cleanup`.
+- **Respx:** все внешние вызовы мокаются, тесты не требуют запущенных сервисов.
+
+#### `beacon.py`
+
+- **Waveform:** сгенерированный sine wave имеет правильную частоту, амплитуду и длительность (FFT через `numpy.fft`).
+- **Configurability:** отключение beacon через `audio_feedback.enabled = false` — функция возвращает `None` мгновенно.
+
+### 13.5 Интеграционные тесты
+
+#### Docker Services
+
+- `docker-compose -f docker-compose.test.yml up` поднимает сервисы на тестовых портах.
+- `/health` Gateway возвращает `"status": "ok"` только когда все бэкенды отвечают.
+- Проверка memory limits: контейнеры не потребляют больше заданных лимитов (`docker stats`).
+
+#### ASR Pipeline
+
+- Отправка `fixtures/audio/ru_hello_16k.wav` → `POST /api/v1/transcribe` (без cleanup).
+- Проверка: ответ содержит ожидаемый текст (допускается небольшая вариативность — fuzzy match через
+  `difflib.SequenceMatcher` > 0.8).
+- Замер latency: `time.perf_counter` до и после, запись в `logs/timing_test.jsonl`.
+
+#### Cleanup Pipeline
+
+- **4 режима:** параметризованный тест `cleanup_mode` ∈ {`llm`, `languagetool`, `both`, `none`}.
+- **LLM:** проверка что Ollama вернул валидный JSON с полем `cleaned_text`.
+- **LanguageTool:** проверка что ответ содержит `matches` и `cleaned_text` с исправлениями.
+- **Both:** порядок — сначала LLM, затем LanguageTool поверх результата.
+- **None:** текст проходит через Gateway без изменений.
+
+#### Failover
+
+- **ASR недоступен:** Gateway возвращает `503`, клиент показывает `TrayState.Error`.
+- **LLM недоступен:** Gateway возвращает raw ASR с флагом `cleanup_skipped: true`.
+- **LanguageTool недоступен:** при `cleanup_mode = both` fallback на `llm`-only.
+- **Circuit breaker:** эмуляция 5 ошибок подряд → проверка что 6-й запрос мгновенно отклоняется (`CircuitBreakerOpen`).
+
+### 13.6 Performance / Load тесты
+
+- **Latency budget:** каждая фаза pipeline замеряется 100 раз на фиксированном аудио (`ru_hello_16k.wav`):
+    - Целевые медианы: VAD < 50ms, ASR (base) < 800ms, LLM (3B) < 1200ms, end-to-end < 2000ms.
+- **Memory profiling:** `memory_profiler` для `audio.py` — убедиться что 60-секундный буфер не вызывает OOM на 4GB RAM.
+- **CPU profiling:** `py-spy` / `pytest-benchmark` — выявление узких мест в `injector.py` (SendInput на длинных
+  текстах > 500 символов).
+
+### 13.7 E2E / Ручные тесты (Windows-only)
+
+> Эти тесты не автоматизируются в CI (требуют Windows + микрофон + GUI), выполняются вручную по чек-листу перед каждым
+> релизом.
+
+| #  | Сценарий                                             | Ожидаемый результат                                                                  |
+|----|------------------------------------------------------|--------------------------------------------------------------------------------------|
+| 1  | Зажать `Ctrl+Alt+V`, сказать «Привет мир», отпустить | Текст «Привет, мир!» вставляется в Notepad                                           |
+| 2  | То же, но в Google Chrome (textarea)                 | Текст вставляется без потери фокуса                                                  |
+| 3  | То же, но в VS Code                                  | Текст вставляется, сохраняется отступ                                                |
+| 4  | Удерживать hotkey > 60 сек                           | Запись автоматически останавливается, трей показывает Error                          |
+| 5  | Отключить микрофон в Windows, нажать hotkey          | Трей переключается в `No Mic`, toast с предложением проверить устройства             |
+| 6  | Остановить Docker во время записи                    | После отпускания hotkey трей → `Offline`, текст не вставляется, retry не бесконечный |
+| 7  | Переключить язык на `en`, сказать «Hello world»      | Распознаётся английский, пунктуация корректна                                        |
+| 8  | Включить `cleanup_mode: none`                        | Вставляется raw ASR без пунктуации и правки                                          |
+| 9  | Переключить `noise_reduction: rnnoise`               | Запись с шумом (вентилятор) распознаётся точнее                                      |
+| 10 | Запустить на ноутбуке 4GB RAM, модель `tiny` + `1b`  | Приложение не падает, latency < 4s                                                   |
+| 11 | Автозапуск с Windows                                 | После перезагрузки иконка появляется в трее автоматически                            |
+| 12 | Имперсонация: нажать hotkey внутри игры (fullscreen) | Текст вставляется через clipboard fallback                                           |
+
+### 13.8 Матрица тестирования по фазам
+
+| Фаза        | Unit-тесты                            | Integration                                    | E2E                 | Performance        |
+|-------------|---------------------------------------|------------------------------------------------|---------------------|--------------------|
+| **Phase 0** | `config.py`, `api_client.py` (mock)   | `test_docker_services.py` (health)             | —                   | —                  |
+| **Phase 1** | `audio.py`, `hotkey.py`               | `test_asr_pipeline.py`                         | Запись + ASR        | Latency ASR        |
+| **Phase 2** | —                                     | `test_cleanup_pipeline.py`, `test_failover.py` | Cleanup quality     | Latency LLM        |
+| **Phase 3** | `injector.py`, `tray.py`, `beacon.py` | Full pipeline                                  | E2E чек-лист (1-6)  | End-to-end latency |
+| **Phase 4** | `beacon.py` (config), OSD             | All integration                                | E2E чек-лист (7-12) | Memory/CPU профили |
+| **Phase 5** | —                                     | —                                              | —                   | —                  |
+
+### 13.9 Регрессионное тестирование
+
+- Перед каждым PR в `main`: полный набор unit + integration (`pytest -m "not e2e"`).
+- Перед каждым релизом: E2E чек-лист на чистой Windows 10/11 виртуалке.
+- При обновлении моделей (Whisper `base` → `small`, LLM `1b` → `3b`): перезапуск performance suite, сравнение
+  latency/quality с baseline.
+
+---
+
+## 14. Документация
 
 Подробная документация — обязательный deliverable проекта, не откладываемый «на потом».
 
-### 13.1 Структура документации
+### 14.1 Структура документации
 
 ```
 VoiVoice/
@@ -1343,7 +1550,7 @@ VoiVoice/
 │   └── CHANGELOG.md       # История изменений
 ```
 
-### 13.2 Содержание по файлам
+### 14.2 Содержание по файлам
 
 **`README.md`** (корень проекта — первое, что видит пользователь на GitHub)
 
@@ -1403,7 +1610,7 @@ VoiVoice/
 - «Работает ли на Windows 7?» — нет, Python 3.14+
 - «Поддерживает ли macOS?» — нет, Windows-only
 
-### 13.3 Когда писать
+### 14.3 Когда писать
 
 | Phase         | Что документировать                                                         |
 |---------------|-----------------------------------------------------------------------------|
@@ -1414,7 +1621,7 @@ VoiVoice/
 
 ---
 
-## 14. Следующий шаг
+## 15. Следующий шаг
 
 Перейти к **Phase 0** — создать `docker-compose.yml`, FastAPI Gateway, базовый скелет клиента и проверить end-to-end
 связность.
