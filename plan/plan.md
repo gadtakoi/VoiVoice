@@ -492,6 +492,83 @@ circuit_breaker:
   half_open_max_calls: 1
 ```
 
+**Timing Performance metrics (отдельный файл):**
+
+Каждый запрос логирует время прохождения через все этапы pipeline в **отдельный файл** `logs/timing_YYYY-MM-DD.jsonl`:
+
+| Этап               | Метрика   | Когда замеряется                           |
+|--------------------|-----------|--------------------------------------------|
+| `hotkey_press`     | `t0`      | Момент нажатия hotkey                      |
+| `capture_start`    | `t1 - t0` | Начало записи с микрофона                  |
+| `capture_duration` | `t2 - t1` | Длительность записи (пока зажат hotkey)    |
+| `vad_process`      | `t3 - t2` | Обработка VAD после отпускания hotkey      |
+| `encode_wav`       | `t4 - t3` | Кодирование буфера в WAV (in-memory)       |
+| `network_upload`   | `t5 - t4` | Отправка аудио на API Gateway              |
+| `asr_inference`    | `t6 - t5` | Whisper inference (включает queue time)    |
+| `llm_cleanup`      | `t7 - t6` | LLM post-processing (если включено)        |
+| `network_download` | `t8 - t7` | Получение ответа от API Gateway            |
+| `text_inject`      | `t9 - t8` | Вставка текста через SendInput / clipboard |
+| `total_e2e`        | `t9 - t0` | Полное время от нажатия hotkey до вставки  |
+
+**Формат timing-лога (JSON Lines):**
+
+  ```json
+  {
+  "timestamp": "2026-05-20T17:45:01.123Z",
+  "trace_id": "abc-123",
+  "total_ms": 1850,
+  "stages": {
+    "capture_ms": 3200,
+    "vad_ms": 12,
+    "encode_ms": 5,
+    "upload_ms": 45,
+    "asr_ms": 340,
+    "llm_ms": 890,
+    "download_ms": 15,
+    "inject_ms": 120
+  },
+  "models": {
+    "asr": "base",
+    "llm": "llama3.2:3b"
+  },
+  "language": "ru",
+  "audio_duration_ms": 3200,
+  "text_length": 42
+}
+```
+
+**Особенности:**
+
+- Файл `logs/timing_*.jsonl` отделён от основных логов — удобно для анализа и построения графиков
+- `capture_ms` может быть > `total_ms`, так как оно overlap'ит с реальным временем (пользователь говорит, пока идёт
+  запись)
+- `llm_ms = 0` если cleanup отключён или fallback на raw ASR
+- Можно агрегировать в Excel / Grafana / просто `jq`:
+  ```bash
+  jq -r '.total_ms' logs/timing_*.jsonl | awk '{sum+=$1; count++} END {print sum/count}'
+  ```
+
+**Конфигурация:**
+
+```yaml
+timing:
+  enabled: true
+  file: "logs/timing.jsonl"
+  rotation_mb: 50
+  retention_days: 30
+  stages:
+    - hotkey_press
+    - capture_start
+    - capture_duration
+    - vad_process
+    - encode_wav
+    - network_upload
+    - asr_inference
+    - llm_cleanup
+    - network_download
+    - text_inject
+```
+
 ---
 
 ## 4. Pipeline обработки
@@ -935,6 +1012,7 @@ VoiVoice/
 
 - [ ] Конфигурация через `config.yaml` (hotkey, модели, пороги VAD)
 - [ ] Логирование (`structlog` для сервисов, `loguru` для клиента, единый JSON формат)
+- [ ] **Timing-логи:** замер каждого этапа pipeline в отдельный `logs/timing.jsonl`
 - [ ] Обработка ошибок и retry logic
 - [ ] Иконки для **всех 10 tray состояний** (SVG/PNG, 16x16, 32x32)
 - [ ] OSD оверлей (`tkinter` / `PyQt`): listening indicator + partial transcript
