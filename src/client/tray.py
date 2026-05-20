@@ -43,7 +43,7 @@ class TrayController:
 
     def _get_icon_for_state(self) -> Image.Image:
         colors = {
-            TrayState.IDLE: "#808080",
+            TrayState.IDLE: "#000000",
             TrayState.LISTENING: "#FF0000",
             TrayState.PROCESSING: "#FFD700",
             TrayState.ERROR: "#FF4500",

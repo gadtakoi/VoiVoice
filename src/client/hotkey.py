@@ -1,3 +1,4 @@
+import sys
 from typing import Callable, Optional, Set
 from loguru import logger
 
@@ -11,7 +12,25 @@ _KEY_ALIASES = {
 
 
 def _normalize_key(key) -> str:
-    """Convert pynput key to normalized string."""
+    """Convert pynput key to normalized string, layout-independent for latin letters."""
+    # Handle virtual key codes first (layout independent)
+    try:
+        vk = None
+        if hasattr(key, "vk") and key.vk is not None:
+            vk = key.vk
+        elif hasattr(key, "value") and hasattr(key.value, "vk"):
+            vk = key.value.vk
+
+        if vk is not None:
+            # VK codes for A-Z
+            if 0x41 <= vk <= 0x5A:
+                return chr(vk).lower()
+            # VK codes for 0-9
+            if 0x30 <= vk <= 0x39:
+                return chr(vk)
+    except Exception:
+        pass
+
     try:
         if hasattr(key, "char") and key.char:
             return key.char.lower()
@@ -43,20 +62,33 @@ class HotkeyController:
         self._backend = "keyboard"
         self._pynput_listener = None
         self._pynput_pressed: Set[str] = set()
+        self._keyboard_active = False
 
     def start(self):
+        # On Windows pynput is more stable (keyboard requires admin rights and
+        # has hook-thread restrictions). On Linux keyboard is usually preferred.
+        if sys.platform == "win32":
+            primary, fallback = self._start_pynput, self._start_keyboard
+            primary_name, fallback_name = "pynput", "keyboard"
+        else:
+            primary, fallback = self._start_keyboard, self._start_pynput
+            primary_name, fallback_name = "keyboard", "pynput"
+
         try:
-            self._start_keyboard()
-            self._backend = "keyboard"
-            logger.info("hotkey_started", combination=self.combination, backend="keyboard")
+            primary()
+            self._backend = primary_name
+            logger.info("hotkey_started", combination=self.combination, backend=primary_name)
         except Exception as exc:
-            logger.warning("keyboard_backend_failed", error=str(exc), fallback="pynput")
+            logger.warning(f"{primary_name}_backend_failed", error=str(exc), fallback=fallback_name)
             try:
-                self._start_pynput()
-                self._backend = "pynput"
-                logger.info("hotkey_started", combination=self.combination, backend="pynput")
+                fallback()
+                self._backend = fallback_name
+                logger.info("hotkey_started", combination=self.combination, backend=fallback_name)
             except Exception as exc2:
-                logger.error("hotkey_start_failed", keyboard_error=str(exc), pynput_error=str(exc2))
+                logger.error(
+                    "hotkey_start_failed",
+                    **{f"{primary_name}_error": str(exc), f"{fallback_name}_error": str(exc2)}
+                )
                 raise
 
     def stop(self):
@@ -75,8 +107,27 @@ class HotkeyController:
 
     def _start_keyboard(self):
         import keyboard
-        keyboard.on_press_key(self.combination, lambda _: self._handle_press())
-        keyboard.on_release_key(self.combination, lambda _: self._handle_release())
+
+        # on_press_key expects a single key name, not a combination.
+        # We hook 'v' and check modifiers manually.
+        def on_v_press(_event=None):
+            try:
+                if keyboard.is_pressed("ctrl") and keyboard.is_pressed("alt"):
+                    self._keyboard_active = True
+                    self._handle_press()
+            except Exception:
+                logger.exception("keyboard_press_callback_error")
+
+        def on_v_release(_event=None):
+            try:
+                if self._keyboard_active:
+                    self._keyboard_active = False
+                    self._handle_release()
+            except Exception:
+                logger.exception("keyboard_release_callback_error")
+
+        keyboard.on_press_key("v", on_v_press)
+        keyboard.on_release_key("v", on_v_release)
         self._listening = True
 
     def _start_pynput(self):
