@@ -10,7 +10,7 @@ services:
       - ./models/whisper:/models:ro
     environment:
       - WHISPER_MODEL=base
-      - WHISPER_LANGUAGE=auto
+      - WHISPER_LANGUAGE=ru
       - WHISPER_COMPUTE_TYPE=int8
       - WHISPER_CPU_THREADS=4
     deploy:

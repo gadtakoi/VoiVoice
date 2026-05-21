@@ -29,6 +29,7 @@ System-wide AI voice dictation for Windows. Local-only inference via Docker Comp
 2. **Start Docker services:**
    ```bash
    docker-compose up -d
+   docker-compose up -d --build api
    ```
 
 3. **Install Python dependencies:**

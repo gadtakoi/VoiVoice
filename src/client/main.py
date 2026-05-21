@@ -71,6 +71,7 @@ class VoiVoiceClient:
         self._running = True
         self._health_ok = False
         self._processing = False
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     def _setup_logging(self):
         log_dir = Path(self.config.logging.directory)
@@ -146,7 +147,16 @@ class VoiVoiceClient:
             wav_bytes = self.audio.stop()
             if wav_bytes:
                 self._processing = True
-                asyncio.create_task(self._process_audio(wav_bytes))
+                if self._loop is not None and not self._loop.is_closed() and self._running:
+                    asyncio.run_coroutine_threadsafe(
+                        self._process_audio(wav_bytes), self._loop
+                    )
+                else:
+                    logger.warning("skip_audio_process", reason="loop_closed_or_stopping")
+                    self._processing = False
+                    self.timing.finish()
+                    if self._running:
+                        self.tray.set_state(TrayState.IDLE)
             else:
                 self.timing.finish()
                 self.tray.set_state(TrayState.IDLE)
@@ -242,6 +252,7 @@ class VoiVoiceClient:
             await asyncio.sleep(10)
 
     async def run(self):
+        self._loop = asyncio.get_running_loop()
         self._setup_logging()
         logger.info("client_starting", version=self.config.app_version)
 

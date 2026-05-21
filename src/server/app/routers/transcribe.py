@@ -28,7 +28,7 @@ Cleaned:"""
 
 
 async def _call_asr(audio: bytes, language: str) -> dict:
-    timeout = httpx.Timeout(connect=5.0, read=30.0)
+    timeout = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
         files = {"file": ("audio.wav", audio, "audio/wav")}
         data = {"model": "base", "language": language if language != "auto" else None}
@@ -41,7 +41,7 @@ async def _call_asr(audio: bytes, language: str) -> dict:
 
 async def _call_llm_cleanup(text: str, model: str) -> str:
     prompt = CLEANUP_PROMPT.format(text=text)
-    timeout = httpx.Timeout(connect=5.0, read=60.0)
+    timeout = httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
         payload = {
             "model": model,

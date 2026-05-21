@@ -56,7 +56,7 @@ class APIClient:
                     headers=headers,
                     files=files,
                     data=data,
-                    timeout=httpx.Timeout(connect=5.0, read=60.0),
+                    timeout=httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0),
                 )
                 resp.raise_for_status()
                 result = resp.json()

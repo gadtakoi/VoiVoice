@@ -4,7 +4,7 @@ app:
 
 hotkey:
   combination: "ctrl+alt+v"
-  hold_to_record: true
+  hold_to_record: false
 
 audio:
   sample_rate: 16000
