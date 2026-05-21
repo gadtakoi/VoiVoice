@@ -1,11 +1,12 @@
 import sys
+import threading
 from typing import Callable, Optional, Set
 from loguru import logger
 
 
 _KEY_ALIASES = {
     "ctrl": {"ctrl_l", "ctrl_r"},
-    "alt": {"alt_l", "alt_r"},
+    "alt": {"alt_l", "alt_r", "alt_gr"},
     "shift": {"shift_l", "shift_r"},
     "win": {"cmd", "cmd_l", "cmd_r"},
 }
@@ -63,6 +64,7 @@ class HotkeyController:
         self._pynput_listener = None
         self._pynput_pressed: Set[str] = set()
         self._keyboard_active = False
+        self._active = False
 
     def start(self):
         # On Windows pynput is more stable (keyboard requires admin rights and
@@ -93,6 +95,7 @@ class HotkeyController:
 
     def stop(self):
         self._listening = False
+        self._active = False
         if self._backend == "keyboard":
             try:
                 import keyboard
@@ -146,7 +149,8 @@ class HotkeyController:
             k = _normalize_key(key)
             was_active = _match_hotkey(self._pynput_pressed, required)
             self._pynput_pressed.discard(k)
-            if was_active:
+            still_active = _match_hotkey(self._pynput_pressed, required)
+            if was_active and not still_active:
                 self._handle_release()
 
         self._pynput_listener = pynput_keyboard.Listener(on_press=on_press, on_release=on_release)
@@ -154,21 +158,33 @@ class HotkeyController:
         self._listening = True
 
     def _handle_press(self):
-        if not self._listening:
+        if not self._listening or self._active:
             return
+        self._active = True
         logger.debug("hotkey_pressed")
         if self.on_press:
-            try:
-                self.on_press()
-            except Exception as exc:
-                logger.error("hotkey_press_handler_error", error=str(exc))
+            # Run handler in a separate thread so pynput's Windows hook
+            # callback returns immediately and doesn't freeze input.
+            threading.Thread(target=self._run_press_handler, daemon=True).start()
+
+    def _run_press_handler(self):
+        try:
+            self.on_press()
+        except Exception as exc:
+            logger.error("hotkey_press_handler_error", error=str(exc))
 
     def _handle_release(self):
         if not self._listening:
             return
+        self._active = False
         logger.debug("hotkey_released")
         if self.on_release:
-            try:
-                self.on_release()
-            except Exception as exc:
-                logger.error("hotkey_release_handler_error", error=str(exc))
+            # Run handler in a separate thread so pynput's Windows hook
+            # callback returns immediately and doesn't freeze input.
+            threading.Thread(target=self._run_release_handler, daemon=True).start()
+
+    def _run_release_handler(self):
+        try:
+            self.on_release()
+        except Exception as exc:
+            logger.error("hotkey_release_handler_error", error=str(exc))

@@ -47,6 +47,9 @@ class TestMatchHotkey:
     def test_alias_match(self):
         assert _match_hotkey({"ctrl_r", "alt_r", "v"}, {"ctrl", "alt", "v"})
 
+    def test_alt_gr_alias(self):
+        assert _match_hotkey({"ctrl_l", "alt_gr", "v"}, {"ctrl", "alt", "v"})
+
 
 class TestHotkeyController:
     def test_init_defaults(self):
@@ -74,3 +77,50 @@ class TestHotkeyController:
         else:
             assert hc._backend == "keyboard"
         assert hc._listening
+
+    def test_pynput_release_only_when_combination_breaks(self, monkeypatch):
+        """Releasing an extra key (e.g. space) while the hotkey is held must not
+        trigger the release handler."""
+        press_calls = []
+        release_calls = []
+
+        hc = HotkeyController(
+            combination="ctrl+alt+v",
+            on_press=lambda: press_calls.append(1),
+            on_release=lambda: release_calls.append(1),
+        )
+        hc._listening = True
+
+        # Simulate pressing ctrl, alt, v
+        hc._pynput_pressed = {"ctrl_l", "alt_l", "v"}
+        hc._handle_press()
+        # Wait for the daemon thread to finish
+        import time
+        time.sleep(0.05)
+        assert len(press_calls) == 1
+
+        # Simulate releasing an extra key (space) while hotkey still held
+        hc._pynput_pressed.add("space")
+        was_active = _match_hotkey(hc._pynput_pressed, {"ctrl", "alt", "v"})
+        hc._pynput_pressed.discard("space")
+        still_active = _match_hotkey(hc._pynput_pressed, {"ctrl", "alt", "v"})
+        if was_active and not still_active:
+            hc._handle_release()
+        time.sleep(0.05)
+        assert len(release_calls) == 0
+
+        # Now release v — combination actually breaks
+        hc._pynput_pressed.discard("v")
+        still_active = _match_hotkey(hc._pynput_pressed, {"ctrl", "alt", "v"})
+        if was_active and not still_active:
+            # We need to recompute was_active for this new release event
+            pass
+        # Better: simulate the actual on_release logic for releasing v
+        hc._pynput_pressed = {"ctrl_l", "alt_l", "v"}  # restore
+        was_active = _match_hotkey(hc._pynput_pressed, {"ctrl", "alt", "v"})
+        hc._pynput_pressed.discard("v")
+        still_active = _match_hotkey(hc._pynput_pressed, {"ctrl", "alt", "v"})
+        if was_active and not still_active:
+            hc._handle_release()
+        time.sleep(0.05)
+        assert len(release_calls) == 1

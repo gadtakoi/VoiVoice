@@ -1,4 +1,5 @@
 import io
+import threading
 import wave
 from typing import Optional, Callable
 import numpy as np
@@ -65,6 +66,7 @@ class AudioCapture:
         silence_timeout_ms: int = 500,
         max_duration_ms: int = 60000,
         on_state_change: Optional[Callable[[str], None]] = None,
+        on_max_duration: Optional[Callable[[Optional[bytes]], None]] = None,
     ):
         self.sample_rate = sample_rate
         self.channels = channels
@@ -73,11 +75,14 @@ class AudioCapture:
         self.silence_timeout_ms = silence_timeout_ms
         self.max_duration_ms = max_duration_ms
         self.on_state_change = on_state_change
+        self.on_max_duration = on_max_duration
         self._buffer: list[np.ndarray] = []
         self._recording = False
         self._stream: Optional[sd.InputStream] = None
         self._actual_sample_rate: int = sample_rate
         self._vad: Optional[SileroVAD] = None
+        self._max_duration_timer: Optional[threading.Timer] = None
+        self._lock = threading.Lock()
         try:
             self._vad = SileroVAD(threshold=vad_threshold)
         except Exception as exc:
@@ -114,81 +119,91 @@ class AudioCapture:
         self._buffer.append(audio)
 
     def start(self):
-        if self._recording:
-            return
-        self._buffer = []
-        self._recording = True
-        self._actual_sample_rate = self.sample_rate
-        if self._vad:
-            self._vad.reset()
-        blocksize = int(self.sample_rate * self.chunk_duration_ms / 1000)
-        try:
-            self._stream = sd.InputStream(
-                samplerate=self.sample_rate,
-                channels=self.channels,
-                dtype=self.dtype,
-                blocksize=blocksize,
-                callback=self._callback,
-            )
-        except Exception as exc:
-            # Fallback 1: let PortAudio choose blocksize automatically.
-            logger.warning("audio_stream_blocksize_fallback", error=str(exc))
+        with self._lock:
+            if self._recording:
+                return
+            self._buffer = []
+            self._recording = True
+            self._actual_sample_rate = self.sample_rate
+            if self._vad:
+                self._vad.reset()
+            blocksize = int(self.sample_rate * self.chunk_duration_ms / 1000)
             try:
                 self._stream = sd.InputStream(
                     samplerate=self.sample_rate,
                     channels=self.channels,
                     dtype=self.dtype,
-                    blocksize=None,
+                    blocksize=blocksize,
                     callback=self._callback,
                 )
-            except Exception as exc2:
-                # Fallback 2: use device's default samplerate.
-                logger.warning("audio_stream_samplerate_fallback", error=str(exc2))
+            except Exception as exc:
+                # Fallback 1: let PortAudio choose blocksize automatically.
+                logger.warning("audio_stream_blocksize_fallback", error=str(exc))
                 try:
                     self._stream = sd.InputStream(
+                        samplerate=self.sample_rate,
                         channels=self.channels,
                         dtype=self.dtype,
                         blocksize=None,
                         callback=self._callback,
                     )
-                    self._actual_sample_rate = int(self._stream.samplerate)
-                except Exception as exc3:
-                    # Fallback 3: some devices require stereo or float32.
-                    logger.warning("audio_stream_format_fallback", error=str(exc3))
+                except Exception as exc2:
+                    # Fallback 2: use device's default samplerate.
+                    logger.warning("audio_stream_samplerate_fallback", error=str(exc2))
                     try:
                         self._stream = sd.InputStream(
-                            channels=2,
-                            dtype="float32",
+                            channels=self.channels,
+                            dtype=self.dtype,
                             blocksize=None,
                             callback=self._callback,
                         )
                         self._actual_sample_rate = int(self._stream.samplerate)
-                    except Exception as exc4:
-                        self._recording = False
-                        raise RuntimeError(
-                            f"Не удалось открыть микрофон. Самая вероятная причина: "
-                            f"нет прав доступа (Параметры Windows → Конфиденциальность → Микрофон). "
-                            f"Также возможно: микрофон занят другим приложением, "
-                            f"или устройство не поддерживает {self.sample_rate} Гц. "
-                            f"Ошибки: {exc}; {exc2}; {exc3}; {exc4}"
-                        ) from exc4
-        self._stream.start()
-        logger.info(
-            "audio_capture_started",
-            sample_rate=self.sample_rate,
-            actual_sample_rate=self._actual_sample_rate,
-        )
-        if self.on_state_change:
-            self.on_state_change("listening")
+                    except Exception as exc3:
+                        # Fallback 3: some devices require stereo or float32.
+                        logger.warning("audio_stream_format_fallback", error=str(exc3))
+                        try:
+                            self._stream = sd.InputStream(
+                                channels=2,
+                                dtype="float32",
+                                blocksize=None,
+                                callback=self._callback,
+                            )
+                            self._actual_sample_rate = int(self._stream.samplerate)
+                        except Exception as exc4:
+                            self._recording = False
+                            raise RuntimeError(
+                                f"Не удалось открыть микрофон. Самая вероятная причина: "
+                                f"нет прав доступа (Параметры Windows → Конфиденциальность → Микрофон). "
+                                f"Также возможно: микрофон занят другим приложением, "
+                                f"или устройство не поддерживает {self.sample_rate} Гц. "
+                                f"Ошибки: {exc}; {exc2}; {exc3}; {exc4}"
+                            ) from exc4
+            self._stream.start()
+            logger.info(
+                "audio_capture_started",
+                sample_rate=self.sample_rate,
+                actual_sample_rate=self._actual_sample_rate,
+            )
+            if self.on_state_change:
+                self.on_state_change("listening")
+            if self.max_duration_ms and self.max_duration_ms > 0:
+                self._max_duration_timer = threading.Timer(
+                    self.max_duration_ms / 1000.0, self._on_max_duration_reached
+                )
+                self._max_duration_timer.start()
 
     def stop(self) -> Optional[bytes]:
-        if not self._recording:
-            return None
-        self._recording = False
-        if self._stream:
-            self._stream.stop()
-            self._stream.close()
-            self._stream = None
+        with self._lock:
+            if not self._recording:
+                return None
+            self._recording = False
+            if self._max_duration_timer:
+                self._max_duration_timer.cancel()
+                self._max_duration_timer = None
+            if self._stream:
+                self._stream.stop()
+                self._stream.close()
+                self._stream = None
 
         if not self._buffer:
             logger.info("audio_capture_empty")
@@ -219,6 +234,13 @@ class AudioCapture:
             wf.setframerate(self.sample_rate)
             wf.writeframes(audio.tobytes())
         return buffer.getvalue()
+
+    def _on_max_duration_reached(self):
+        if self._recording:
+            logger.warning("audio_max_duration_reached", max_duration_ms=self.max_duration_ms)
+            wav_bytes = self.stop()
+            if self.on_max_duration:
+                self.on_max_duration(wav_bytes)
 
     @property
     def is_recording(self) -> bool:

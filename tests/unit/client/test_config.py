@@ -7,6 +7,7 @@ def test_default_config():
     assert cfg.app_name == "VoiVoice"
     assert cfg.hotkey.combination == "ctrl+alt+v"
     assert cfg.audio.sample_rate == 16000
+    assert cfg.audio.max_duration_ms == 60000
     assert cfg.services.api_url == "http://localhost:8080"
 
 

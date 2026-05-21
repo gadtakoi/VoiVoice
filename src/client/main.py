@@ -16,6 +16,7 @@ if str(_project_root) not in sys.path:
 import time
 import asyncio
 import threading
+from typing import Optional
 
 from loguru import logger
 
@@ -47,7 +48,9 @@ class VoiVoiceClient:
             chunk_duration_ms=self.config.audio.chunk_duration_ms,
             vad_threshold=self.config.audio.vad_threshold,
             silence_timeout_ms=self.config.audio.silence_timeout_ms,
+            max_duration_ms=getattr(self.config.audio, "max_duration_ms", 60000),
             on_state_change=self._on_audio_state_change,
+            on_max_duration=self._on_max_duration,
         )
         self.hotkey = HotkeyController(
             combination=self.config.hotkey.combination,
@@ -145,27 +148,36 @@ class VoiVoiceClient:
             self.beacon.stop()
             self.timing.mark("capture_duration")
             wav_bytes = self.audio.stop()
-            if wav_bytes:
-                self._processing = True
-                if self._loop is not None and not self._loop.is_closed() and self._running:
-                    asyncio.run_coroutine_threadsafe(
-                        self._process_audio(wav_bytes), self._loop
-                    )
-                else:
-                    logger.warning("skip_audio_process", reason="loop_closed_or_stopping")
-                    self._processing = False
-                    self.timing.finish()
-                    if self._running:
-                        self.tray.set_state(TrayState.IDLE)
-            else:
-                self.timing.finish()
-                self.tray.set_state(TrayState.IDLE)
+            self._handle_captured_audio(wav_bytes)
         except Exception as exc:
             logger.error("audio_stop_failed", error=str(exc))
             self.beacon.error()
             self.tray.set_state(TrayState.ERROR)
             self._processing = False
             self.timing.finish()
+
+    def _on_max_duration(self, wav_bytes: Optional[bytes]):
+        logger.warning("max_duration_reached", max_duration_ms=self.config.audio.max_duration_ms)
+        self.beacon.stop()
+        self.timing.mark("capture_duration")
+        self._handle_captured_audio(wav_bytes)
+
+    def _handle_captured_audio(self, wav_bytes: Optional[bytes]):
+        if wav_bytes:
+            self._processing = True
+            if self._loop is not None and not self._loop.is_closed() and self._running:
+                asyncio.run_coroutine_threadsafe(
+                    self._process_audio(wav_bytes), self._loop
+                )
+            else:
+                logger.warning("skip_audio_process", reason="loop_closed_or_stopping")
+                self._processing = False
+                self.timing.finish()
+                if self._running:
+                    self.tray.set_state(TrayState.IDLE)
+        else:
+            self.timing.finish()
+            self.tray.set_state(TrayState.IDLE)
 
     async def _process_audio(self, wav_bytes: bytes):
         start_time = time.perf_counter()

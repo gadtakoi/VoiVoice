@@ -4,7 +4,7 @@ app:
 
 hotkey:
   combination: "ctrl+alt+v"
-  hold_to_record: false
+  hold_to_record: true
 
 audio:
   sample_rate: 16000
@@ -13,6 +13,7 @@ audio:
   chunk_duration_ms: 30
   vad_threshold: 0.5
   silence_timeout_ms: 500
+  max_duration_ms: 60000
 
 services:
   api_url: "http://localhost:8080"

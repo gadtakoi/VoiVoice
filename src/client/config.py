@@ -16,6 +16,7 @@ class AudioConfig(BaseSettings):
     chunk_duration_ms: int = 30
     vad_threshold: float = 0.5
     silence_timeout_ms: int = 500
+    max_duration_ms: int = 60000
 
 
 class ServicesConfig(BaseSettings):
