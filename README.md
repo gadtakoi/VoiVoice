@@ -3,7 +3,7 @@
 System-wide AI voice dictation for Windows. Local-only inference via Docker Compose. Press and hold `Ctrl+Alt+V`, speak, release — clean text appears in any active text field.
 
 ![Python](https://img.shields.io/badge/python-3.14+-blue)
-![Coverage](https://img.shields.io/badge/coverage-32.3%25-yellow)
+![Coverage](https://img.shields.io/badge/coverage-87.7%25-brightgreen)
 
 ## Features
 
