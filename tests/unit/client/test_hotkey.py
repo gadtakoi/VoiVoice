@@ -1,9 +1,7 @@
 import sys
 from unittest.mock import MagicMock
 
-import pytest
-
-from src.client.hotkey import _normalize_key, _match_hotkey, HotkeyController
+from src.client.hotkey import HotkeyController, _match_hotkey, _normalize_key
 
 
 class FakePynputKey:
@@ -96,6 +94,7 @@ class TestHotkeyController:
         hc._handle_press()
         # Wait for the daemon thread to finish
         import time
+
         time.sleep(0.05)
         assert len(press_calls) == 1
 

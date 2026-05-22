@@ -1,5 +1,6 @@
-import pytest
 import httpx
+import pytest
+
 from src.client.api_client import APIClient
 
 

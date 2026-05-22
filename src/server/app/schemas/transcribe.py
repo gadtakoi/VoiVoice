@@ -1,21 +1,20 @@
 from pydantic import BaseModel, Field
-from typing import Optional
 
 
 class TranscribeRequest(BaseModel):
-    language: Optional[str] = Field(default="auto", description="Language code (ru, en, auto)")
+    language: str | None = Field(default="auto", description="Language code (ru, en, auto)")
     cleanup: bool = Field(default=True, description="Enable LLM cleanup")
 
 
 class TranscribeResponse(BaseModel):
     success: bool
     raw: str
-    cleaned: Optional[str] = None
-    language: Optional[str] = None
-    duration_ms: Optional[int] = None
-    processing_ms: Optional[int] = None
+    cleaned: str | None = None
+    language: str | None = None
+    duration_ms: int | None = None
+    processing_ms: int | None = None
     cleanup_skipped: bool = False
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class HealthResponse(BaseModel):

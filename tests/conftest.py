@@ -1,10 +1,12 @@
-import pytest
 from pathlib import Path
+
+import pytest
 
 
 @pytest.fixture
 def mock_config():
     from src.client.config import Config
+
     return Config()
 
 

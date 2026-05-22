@@ -1,8 +1,8 @@
 import sys
 import threading
-from typing import Callable, Optional, Set
-from loguru import logger
+from collections.abc import Callable
 
+from loguru import logger
 
 _KEY_ALIASES = {
     "ctrl": {"ctrl_l", "ctrl_r"},
@@ -40,7 +40,7 @@ def _normalize_key(key) -> str:
     return str(key).replace("Key.", "").lower()
 
 
-def _match_hotkey(pressed: Set[str], required: Set[str]) -> bool:
+def _match_hotkey(pressed: set[str], required: set[str]) -> bool:
     """Check if pressed keys match required combination (with aliases)."""
     for req in required:
         aliases = _KEY_ALIASES.get(req, {req})
@@ -53,8 +53,8 @@ class HotkeyController:
     def __init__(
         self,
         combination: str = "ctrl+alt+v",
-        on_press: Optional[Callable] = None,
-        on_release: Optional[Callable] = None,
+        on_press: Callable | None = None,
+        on_release: Callable | None = None,
     ):
         self.combination = combination.lower()
         self.on_press = on_press
@@ -62,7 +62,7 @@ class HotkeyController:
         self._listening = False
         self._backend = "keyboard"
         self._pynput_listener = None
-        self._pynput_pressed: Set[str] = set()
+        self._pynput_pressed: set[str] = set()
         self._keyboard_active = False
         self._active = False
 
@@ -88,8 +88,7 @@ class HotkeyController:
                 logger.info("hotkey_started", combination=self.combination, backend=fallback_name)
             except Exception as exc2:
                 logger.error(
-                    "hotkey_start_failed",
-                    **{f"{primary_name}_error": str(exc), f"{fallback_name}_error": str(exc2)}
+                    "hotkey_start_failed", **{f"{primary_name}_error": str(exc), f"{fallback_name}_error": str(exc2)}
                 )
                 raise
 
@@ -99,6 +98,7 @@ class HotkeyController:
         if self._backend == "keyboard":
             try:
                 import keyboard
+
                 keyboard.unhook_all()
             except Exception as exc:
                 logger.warning("hotkey_stop_failed", error=str(exc))

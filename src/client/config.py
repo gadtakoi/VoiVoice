@@ -1,6 +1,6 @@
-import yaml
 from pathlib import Path
-from typing import Optional
+
+import yaml
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -74,11 +74,11 @@ class Config(BaseSettings):
     retry: RetrySection = RetrySection()
 
     @classmethod
-    def from_yaml(cls, path: Optional[Path] = None) -> "Config":
+    def from_yaml(cls, path: Path | None = None) -> "Config":
         if path is None:
             path = Path("config.yaml")
         if not path.exists():
             return cls()
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
         return cls(**data)

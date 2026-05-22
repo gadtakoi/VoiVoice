@@ -1,7 +1,7 @@
 import json
 import time
 from pathlib import Path
-from typing import Optional
+
 from loguru import logger
 
 
@@ -11,7 +11,7 @@ class TimingLogger:
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
         self._file = None
-        self._current_trace: Optional[str] = None
+        self._current_trace: str | None = None
         self._start_times: dict[str, float] = {}
 
     def _get_file(self):
@@ -29,7 +29,7 @@ class TimingLogger:
             return
         self._start_times[stage] = time.perf_counter()
 
-    def finish(self, text_length: int = 0, language: Optional[str] = None):
+    def finish(self, text_length: int = 0, language: str | None = None):
         if not self.enabled or not self._current_trace:
             return
         t0 = self._start_times.get("t0", 0)

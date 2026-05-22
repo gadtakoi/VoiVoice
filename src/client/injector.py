@@ -1,5 +1,6 @@
-import time
 import ctypes
+import time
+
 from loguru import logger
 
 
@@ -82,6 +83,7 @@ class TextInjector:
         try:
             import win32clipboard
             import win32con
+
             win32clipboard.OpenClipboard()
             win32clipboard.EmptyClipboard()
             win32clipboard.SetClipboardText(text, win32con.CF_UNICODETEXT)

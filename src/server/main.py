@@ -1,8 +1,7 @@
 import structlog
+from app.routers import health, transcribe
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-from app.routers import health, transcribe
 
 structlog.configure(
     processors=[

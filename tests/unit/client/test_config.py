@@ -1,4 +1,3 @@
-import pytest
 from src.client.config import Config
 
 

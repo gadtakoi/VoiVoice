@@ -1,10 +1,10 @@
 import os
+from collections.abc import Callable
 from enum import Enum
-from typing import Callable, Optional
 
-from PIL import Image, ImageDraw
 import pystray
 from loguru import logger
+from PIL import Image, ImageDraw
 
 
 class TrayState(Enum):
@@ -18,10 +18,10 @@ class TrayState(Enum):
 class TrayController:
     def __init__(
         self,
-        on_quit: Optional[Callable] = None,
-        on_toggle_pause: Optional[Callable] = None,
-        on_language_change: Optional[Callable[[str], None]] = None,
-        on_cleanup_change: Optional[Callable[[str], None]] = None,
+        on_quit: Callable | None = None,
+        on_toggle_pause: Callable | None = None,
+        on_language_change: Callable[[str], None] | None = None,
+        on_cleanup_change: Callable[[str], None] | None = None,
     ):
         self._state = TrayState.IDLE
         self._on_quit = on_quit
@@ -31,7 +31,7 @@ class TrayController:
         self._paused = False
         self._language = "Auto"
         self._cleanup = "LLM"
-        self._icon: Optional[pystray.Icon] = None
+        self._icon: pystray.Icon | None = None
 
     def _create_icon_image(self, color: str) -> Image.Image:
         width = 64

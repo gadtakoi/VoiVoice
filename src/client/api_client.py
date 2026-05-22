@@ -1,6 +1,6 @@
-import uuid
 import asyncio
-from typing import Optional
+import uuid
+
 import httpx
 from loguru import logger
 
@@ -9,7 +9,7 @@ class APIClient:
     def __init__(self, base_url: str, timeout: float = 30.0):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
@@ -30,9 +30,9 @@ class APIClient:
         language: str = "auto",
         cleanup: bool = True,
         model: str = "medium",
-        prompt: Optional[str] = None,
+        prompt: str | None = None,
         vad_filter: bool = False,
-        hotwords: Optional[str] = None,
+        hotwords: str | None = None,
         max_attempts: int = 3,
         base_delay: float = 0.5,
         multiplier: float = 2.0,
@@ -53,7 +53,7 @@ class APIClient:
         if hotwords:
             data["hotwords"] = hotwords
 
-        last_exc: Optional[Exception] = None
+        last_exc: Exception | None = None
         delay = base_delay
 
         for attempt in range(1, max_attempts + 1):

@@ -1,7 +1,6 @@
-import pytest
 from fastapi.testclient import TestClient
-from src.server.main import app
 
+from src.server.main import app
 
 client = TestClient(app)
 
@@ -17,6 +16,7 @@ def test_health_degraded(monkeypatch):
         return False
 
     import src.server.routers.health as health
+
     monkeypatch.setattr(health, "_check_service", mock_check)
 
     response = client.get("/api/v1/health")

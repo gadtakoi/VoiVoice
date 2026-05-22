@@ -1,4 +1,5 @@
 """Быстрая диагностика доступа к микрофону Windows."""
+
 import ctypes
 from ctypes import wintypes
 
@@ -7,17 +8,19 @@ print("=== Диагностика микрофона ===\n")
 # 1. Проверка waveInOpen (Windows MME)
 winmm = ctypes.windll.winmm
 
+
 class WAVEFORMATEX(ctypes.Structure):
     _pack_ = 1
     _fields_ = [
-        ('wFormatTag', wintypes.WORD),
-        ('nChannels', wintypes.WORD),
-        ('nSamplesPerSec', wintypes.DWORD),
-        ('nAvgBytesPerSec', wintypes.DWORD),
-        ('nBlockAlign', wintypes.WORD),
-        ('wBitsPerSample', wintypes.WORD),
-        ('cbSize', wintypes.WORD),
+        ("wFormatTag", wintypes.WORD),
+        ("nChannels", wintypes.WORD),
+        ("nSamplesPerSec", wintypes.DWORD),
+        ("nAvgBytesPerSec", wintypes.DWORD),
+        ("nBlockAlign", wintypes.WORD),
+        ("wBitsPerSample", wintypes.WORD),
+        ("cbSize", wintypes.WORD),
     ]
+
 
 hwi = wintypes.HANDLE()
 wf = WAVEFORMATEX()
@@ -39,18 +42,23 @@ else:
 # 2. Проверка WASAPI capture через pycaw/comtypes
 try:
     import ctypes.util
-    _orig = ctypes.util.find_library
-    ctypes.util.find_library = lambda name: name + '.dll' if name in (
-        'ole32', 'kernel32', 'user32', 'advapi32', 'shell32', 'winmm', 'oleaut32'
-    ) else _orig(name)
 
-    from pycaw.pycaw import AudioUtilities
+    _orig = ctypes.util.find_library
+    ctypes.util.find_library = lambda name: (
+        name + ".dll"
+        if name in ("ole32", "kernel32", "user32", "advapi32", "shell32", "winmm", "oleaut32")
+        else _orig(name)
+    )
+
+    import warnings
+
+    from comtypes import CLSCTX_ALL
     from pycaw.api.audioclient import IAudioClient
     from pycaw.api.endpointvolume import IAudioEndpointVolume
     from pycaw.constants import AudioDeviceState
-    from comtypes import CLSCTX_ALL
-    import warnings
-    warnings.filterwarnings('ignore')
+    from pycaw.pycaw import AudioUtilities
+
+    warnings.filterwarnings("ignore")
 
     capture_ok = False
     for dev in AudioUtilities.GetAllDevices():

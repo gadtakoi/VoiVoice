@@ -13,22 +13,21 @@ _project_root = Path(__file__).resolve().parents[2]
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-import time
 import asyncio
 import threading
-from typing import Optional
+import time
 
 from loguru import logger
 
-from src.client.config import Config
 from src.client.api_client import APIClient
-from src.client.tray import TrayController, TrayState
 from src.client.audio import AudioCapture
+from src.client.beacon import AudioBeacon
+from src.client.config import Config
 from src.client.hotkey import HotkeyController
 from src.client.injector import TextInjector
-from src.client.beacon import AudioBeacon
 from src.client.timing import TimingLogger
 from src.client.toast import ToastNotifier
+from src.client.tray import TrayController, TrayState
 
 
 class VoiVoiceClient:
@@ -115,7 +114,7 @@ class VoiVoiceClient:
         logger.info("language_changed", language=lang)
 
     def _on_cleanup_change(self, mode: str):
-        self.config.services.cleanup_enabled = (mode != "None")
+        self.config.services.cleanup_enabled = mode != "None"
         logger.info("cleanup_mode_changed", mode=mode)
 
     def _on_audio_state_change(self, state: str):
@@ -156,19 +155,17 @@ class VoiVoiceClient:
             self._processing = False
             self.timing.finish()
 
-    def _on_max_duration(self, wav_bytes: Optional[bytes]):
+    def _on_max_duration(self, wav_bytes: bytes | None):
         logger.warning("max_duration_reached", max_duration_ms=self.config.audio.max_duration_ms)
         self.beacon.stop()
         self.timing.mark("capture_duration")
         self._handle_captured_audio(wav_bytes)
 
-    def _handle_captured_audio(self, wav_bytes: Optional[bytes]):
+    def _handle_captured_audio(self, wav_bytes: bytes | None):
         if wav_bytes:
             self._processing = True
             if self._loop is not None and not self._loop.is_closed() and self._running:
-                asyncio.run_coroutine_threadsafe(
-                    self._process_audio(wav_bytes), self._loop
-                )
+                asyncio.run_coroutine_threadsafe(self._process_audio(wav_bytes), self._loop)
             else:
                 logger.warning("skip_audio_process", reason="loop_closed_or_stopping")
                 self._processing = False

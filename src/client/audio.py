@@ -1,10 +1,11 @@
 import io
 import threading
 import wave
-from typing import Optional, Callable
+from collections.abc import Callable
+
 import numpy as np
-import sounddevice as sd
 import onnxruntime as ort
+import sounddevice as sd
 from loguru import logger
 
 try:
@@ -14,6 +15,7 @@ except Exception:
 
 
 import os
+
 
 class SileroVAD:
     """Simple ONNX Silero VAD wrapper."""
@@ -70,8 +72,8 @@ class AudioCapture:
         vad_threshold: float = 0.5,
         silence_timeout_ms: int = 500,
         max_duration_ms: int = 60000,
-        on_state_change: Optional[Callable[[str], None]] = None,
-        on_max_duration: Optional[Callable[[Optional[bytes]], None]] = None,
+        on_state_change: Callable[[str], None] | None = None,
+        on_max_duration: Callable[[bytes | None], None] | None = None,
     ):
         self.sample_rate = sample_rate
         self.channels = channels
@@ -83,10 +85,10 @@ class AudioCapture:
         self.on_max_duration = on_max_duration
         self._buffer: list[np.ndarray] = []
         self._recording = False
-        self._stream: Optional[sd.InputStream] = None
+        self._stream: sd.InputStream | None = None
         self._actual_sample_rate: int = sample_rate
-        self._vad: Optional[SileroVAD] = None
-        self._max_duration_timer: Optional[threading.Timer] = None
+        self._vad: SileroVAD | None = None
+        self._max_duration_timer: threading.Timer | None = None
         self._lock = threading.Lock()
         try:
             self._vad = SileroVAD(threshold=vad_threshold)
@@ -219,12 +221,10 @@ class AudioCapture:
             if self.on_state_change:
                 self.on_state_change("listening")
             if self.max_duration_ms and self.max_duration_ms > 0:
-                self._max_duration_timer = threading.Timer(
-                    self.max_duration_ms / 1000.0, self._on_max_duration_reached
-                )
+                self._max_duration_timer = threading.Timer(self.max_duration_ms / 1000.0, self._on_max_duration_reached)
                 self._max_duration_timer.start()
 
-    def stop(self) -> Optional[bytes]:
+    def stop(self) -> bytes | None:
         with self._lock:
             if not self._recording:
                 return None

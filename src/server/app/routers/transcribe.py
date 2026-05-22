@@ -1,8 +1,8 @@
 import os
 import time
+
 import httpx
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from typing import Optional
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from structlog import get_logger
 
 from ..schemas.transcribe import TranscribeResponse
@@ -32,9 +32,9 @@ async def _call_asr(
     audio: bytes,
     language: str,
     model: str,
-    prompt: Optional[str] = None,
+    prompt: str | None = None,
     vad_filter: bool = False,
-    hotwords: Optional[str] = None,
+    hotwords: str | None = None,
 ) -> dict:
     timeout = httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
@@ -77,12 +77,12 @@ async def _call_llm_cleanup(text: str, model: str) -> str:
 @router.post("/transcribe", response_model=TranscribeResponse)
 async def transcribe(
     file: UploadFile = File(...),
-    language: Optional[str] = Form("auto"),
+    language: str | None = Form("auto"),
     cleanup: bool = Form(True),
-    model: Optional[str] = Form("small"),
-    prompt: Optional[str] = Form(None),
+    model: str | None = Form("small"),
+    prompt: str | None = Form(None),
     vad_filter: bool = Form(False),
-    hotwords: Optional[str] = Form(None),
+    hotwords: str | None = Form(None),
 ) -> TranscribeResponse:
     start_time = time.perf_counter()
     trace_id = os.urandom(8).hex()

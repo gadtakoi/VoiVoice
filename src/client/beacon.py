@@ -1,6 +1,5 @@
 import numpy as np
 import sounddevice as sd
-from loguru import logger
 
 
 class AudioBeacon:
