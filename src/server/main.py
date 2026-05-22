@@ -1,5 +1,9 @@
 import structlog
-from app.routers import health, transcribe
+
+try:
+    from app.routers import health, transcribe
+except ImportError:
+    from src.server.app.routers import health, transcribe
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

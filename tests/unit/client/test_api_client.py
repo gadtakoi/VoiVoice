@@ -11,18 +11,18 @@ def client():
 
 
 @pytest.mark.asyncio
-async def test_health_success(respx_mock):
+async def test_health_success(respx_mock, client):
     """Тест: успешный ответ от эндпоинта /health."""
     # Мокаем HTTP-ответ через respx
     respx_mock.get('http://localhost:8080/api/v1/health').mock(
         return_value=httpx.Response(200, json={'status': 'ok', 'services': {}})
     )
-    result = await client().health()
+    result = await client.health()
     assert result['status'] == 'ok'
 
 
 @pytest.mark.asyncio
-async def test_transcribe_success(respx_mock):
+async def test_transcribe_success(respx_mock, client):
     """Тест: успешная транскрипция аудио через API."""
     respx_mock.post('http://localhost:8080/api/v1/transcribe').mock(
         return_value=httpx.Response(
@@ -35,6 +35,6 @@ async def test_transcribe_success(respx_mock):
             },
         )
     )
-    result = await client().transcribe(b'fake wav data')
+    result = await client.transcribe(b'fake wav data')
     assert result['raw'] == 'hello'
     assert result['cleaned'] == 'Hello.'
