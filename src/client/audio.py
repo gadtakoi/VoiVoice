@@ -20,7 +20,7 @@ import os
 class SileroVAD:
     """Обёртка над ONNX-моделью Silero VAD для обнаружения голосовой активности."""
 
-    _DEFAULT_MODEL = os.path.join(os.path.dirname(__file__), "..", "..", "models", "silero_vad.onnx")
+    _DEFAULT_MODEL = os.path.join(os.path.dirname(__file__), '..', '..', 'models', 'silero_vad.onnx')
 
     def __init__(self, model_path: str = None, threshold: float = 0.5):
         """Инициализация VAD.
@@ -54,7 +54,7 @@ class SileroVAD:
             Вероятность наличия речи в диапазоне [0.0, 1.0].
         """
         if sample_rate not in self.sample_rates:
-            raise ValueError(f"Unsupported sample rate: {sample_rate}")
+            raise ValueError(f'Unsupported sample rate: {sample_rate}')
         # Приводим к float32 в диапазоне [-1, 1]
         if audio.dtype != np.float32:
             audio = audio.astype(np.float32) / np.iinfo(np.int16).max
@@ -66,12 +66,12 @@ class SileroVAD:
             audio = np.pad(audio, (0, input_len - len(audio)))
         audio = audio[:input_len]
         inputs = {
-            "input": audio.reshape(1, -1),
-            "h": self.h,
-            "c": self.c,
-            "sr": np.array(sample_rate, dtype=np.int64),
+            'input': audio.reshape(1, -1),
+            'h': self.h,
+            'c': self.c,
+            'sr': np.array(sample_rate, dtype=np.int64),
         }
-        out, h, c = self.session.run(["output", "hn", "cn"], inputs)
+        out, h, c = self.session.run(['output', 'hn', 'cn'], inputs)
         self.h = h
         self.c = c
         return float(out[0][0])
@@ -89,7 +89,7 @@ class AudioCapture:
         self,
         sample_rate: int = 16000,
         channels: int = 1,
-        dtype: str = "int16",
+        dtype: str = 'int16',
         chunk_duration_ms: int = 30,
         vad_threshold: float = 0.5,
         silence_timeout_ms: int = 500,
@@ -128,7 +128,7 @@ class AudioCapture:
         try:
             self._vad = SileroVAD(threshold=vad_threshold)
         except Exception as exc:
-            logger.warning("vad_init_failed", error=str(exc))
+            logger.warning('vad_init_failed', error=str(exc))
 
     def _resample(self, audio: np.ndarray, orig_sr: int, target_sr: int) -> np.ndarray:
         """Передискретизация аудио с помощью scipy или линейной интерполяции.
@@ -175,7 +175,7 @@ class AudioCapture:
         if signal is None or audio.size < 10:
             return audio
         audio_float = audio.astype(np.float32)
-        sos = signal.butter(2, cutoff, btype="high", fs=sr, output="sos")
+        sos = signal.butter(2, cutoff, btype='high', fs=sr, output='sos')
         filtered = signal.sosfilt(sos, audio_float)
         return filtered.astype(audio.dtype)
 
@@ -203,7 +203,7 @@ class AudioCapture:
     def _callback(self, indata: np.ndarray, frames: int, time_info, status):
         """Колбэк sounddevice: вызывается для каждого блока входных данных."""
         if status:
-            logger.warning("audio_stream_status", status=str(status))
+            logger.warning('audio_stream_status', status=str(status))
         if not self._recording:
             return
         # Преобразуем float32 stereo в int16 mono при необходимости
@@ -239,7 +239,7 @@ class AudioCapture:
                 )
             except Exception as exc:
                 # Fallback 1: позволяем PortAudio выбрать blocksize автоматически
-                logger.warning("audio_stream_blocksize_fallback", error=str(exc))
+                logger.warning('audio_stream_blocksize_fallback', error=str(exc))
                 try:
                     self._stream = sd.InputStream(
                         samplerate=self.sample_rate,
@@ -250,7 +250,7 @@ class AudioCapture:
                     )
                 except Exception as exc2:
                     # Fallback 2: используем частоту дискретизации устройства по умолчанию
-                    logger.warning("audio_stream_samplerate_fallback", error=str(exc2))
+                    logger.warning('audio_stream_samplerate_fallback', error=str(exc2))
                     try:
                         self._stream = sd.InputStream(
                             channels=self.channels,
@@ -261,11 +261,11 @@ class AudioCapture:
                         self._actual_sample_rate = int(self._stream.samplerate)
                     except Exception as exc3:
                         # Fallback 3: некоторые устройства требуют stereo или float32
-                        logger.warning("audio_stream_format_fallback", error=str(exc3))
+                        logger.warning('audio_stream_format_fallback', error=str(exc3))
                         try:
                             self._stream = sd.InputStream(
                                 channels=2,
-                                dtype="float32",
+                                dtype='float32',
                                 blocksize=None,
                                 callback=self._callback,
                             )
@@ -273,20 +273,20 @@ class AudioCapture:
                         except Exception as exc4:
                             self._recording = False
                             raise RuntimeError(
-                                f"Не удалось открыть микрофон. Самая вероятная причина: "
-                                f"нет прав доступа (Параметры Windows → Конфиденциальность → Микрофон). "
-                                f"Также возможно: микрофон занят другим приложением, "
-                                f"или устройство не поддерживает {self.sample_rate} Гц. "
-                                f"Ошибки: {exc}; {exc2}; {exc3}; {exc4}"
+                                f'Не удалось открыть микрофон. Самая вероятная причина: '
+                                f'нет прав доступа (Параметры Windows → Конфиденциальность → Микрофон). '
+                                f'Также возможно: микрофон занят другим приложением, '
+                                f'или устройство не поддерживает {self.sample_rate} Гц. '
+                                f'Ошибки: {exc}; {exc2}; {exc3}; {exc4}'
                             ) from exc4
             self._stream.start()
             logger.info(
-                "audio_capture_started",
+                'audio_capture_started',
                 sample_rate=self.sample_rate,
                 actual_sample_rate=self._actual_sample_rate,
             )
             if self.on_state_change:
-                self.on_state_change("listening")
+                self.on_state_change('listening')
             if self.max_duration_ms and self.max_duration_ms > 0:
                 # Таймер принудительной остановки по достижении максимальной длительности
                 self._max_duration_timer = threading.Timer(self.max_duration_ms / 1000.0, self._on_max_duration_reached)
@@ -311,9 +311,9 @@ class AudioCapture:
                 self._stream = None
 
         if not self._buffer:
-            logger.info("audio_capture_empty")
+            logger.info('audio_capture_empty')
             if self.on_state_change:
-                self.on_state_change("idle")
+                self.on_state_change('idle')
             return None
 
         # Склеиваем все чанки в один массив
@@ -321,7 +321,7 @@ class AudioCapture:
         if self._actual_sample_rate != self.sample_rate:
             # Передискретизация, если устройство работало на другой частоте
             logger.info(
-                "audio_resampling",
+                'audio_resampling',
                 from_sr=self._actual_sample_rate,
                 to_sr=self.sample_rate,
             )
@@ -331,9 +331,9 @@ class AudioCapture:
         audio = self._normalize_audio(audio, target_rms=0.05)
         wav_bytes = self._encode_wav(audio)
         duration_ms = int(len(audio) / self.sample_rate * 1000)
-        logger.info("audio_capture_stopped", duration_ms=duration_ms, samples=len(audio))
+        logger.info('audio_capture_stopped', duration_ms=duration_ms, samples=len(audio))
         if self.on_state_change:
-            self.on_state_change("processing")
+            self.on_state_change('processing')
         return wav_bytes
 
     def _encode_wav(self, audio: np.ndarray) -> bytes:
@@ -346,7 +346,7 @@ class AudioCapture:
             Байты WAV-файла.
         """
         buffer = io.BytesIO()
-        with wave.open(buffer, "wb") as wf:
+        with wave.open(buffer, 'wb') as wf:
             wf.setnchannels(self.channels)
             wf.setsampwidth(np.dtype(self.dtype).itemsize)
             wf.setframerate(self.sample_rate)
@@ -356,7 +356,7 @@ class AudioCapture:
     def _on_max_duration_reached(self):
         """Обработчик таймера: вызывается при достижении максимальной длительности записи."""
         if self._recording:
-            logger.warning("audio_max_duration_reached", max_duration_ms=self.max_duration_ms)
+            logger.warning('audio_max_duration_reached', max_duration_ms=self.max_duration_ms)
             wav_bytes = self.stop()
             if self.on_max_duration:
                 self.on_max_duration(wav_bytes)

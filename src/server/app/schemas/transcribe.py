@@ -4,8 +4,8 @@ from pydantic import BaseModel, Field
 class TranscribeRequest(BaseModel):
     """Схема тела запроса на транскрипцию (используется в документации)."""
 
-    language: str | None = Field(default="auto", description="Код языка (ru, en, auto)")
-    cleanup: bool = Field(default=True, description="Включить LLM-постобработку")
+    language: str | None = Field(default='auto', description='Код языка (ru, en, auto)')
+    cleanup: bool = Field(default=True, description='Включить LLM-постобработку')
 
 
 class TranscribeResponse(BaseModel):
@@ -43,4 +43,4 @@ class HealthResponse(BaseModel):
 
     status: str
     services: dict[str, str]
-    version: str = "0.1.0"
+    version: str = '0.1.0'

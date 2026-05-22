@@ -21,7 +21,7 @@ def tmp_config_file(tmp_path: Path):
     Returns:
         Path к созданному файлу config.yaml.
     """
-    config_path = tmp_path / "config.yaml"
+    config_path = tmp_path / 'config.yaml'
     config_path.write_text(
         """
 app:
@@ -34,6 +34,6 @@ audio:
 services:
   api_url: "http://localhost:8080"
 """,
-        encoding="utf-8",
+        encoding='utf-8',
     )
     return config_path

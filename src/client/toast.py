@@ -27,4 +27,4 @@ class ToastNotifier:
         if not self.enabled:
             return
         # Если нативные toast недоступны, логируем в консоль
-        logger.info("toast", title=title, message=message)
+        logger.info('toast', title=title, message=message)

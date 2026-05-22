@@ -7,7 +7,7 @@ from loguru import logger
 class TextInjector:
     """Инжектор текста в активное окно через SendInput или буфер обмена."""
 
-    def __init__(self, method: str = "sendinput", delay_ms: int = 10):
+    def __init__(self, method: str = 'sendinput', delay_ms: int = 10):
         """Инициализация инжектора.
 
         Args:
@@ -29,13 +29,13 @@ class TextInjector:
         """
         if not text:
             return True
-        if self.method == "sendinput":
+        if self.method == 'sendinput':
             try:
                 self._send_input(text)
-                logger.info("text_injected", method="sendinput", length=len(text))
+                logger.info('text_injected', method='sendinput', length=len(text))
                 return True
             except Exception as exc:
-                logger.warning("sendinput_failed", error=str(exc), fallback="clipboard")
+                logger.warning('sendinput_failed', error=str(exc), fallback='clipboard')
                 return self._clipboard_inject(text)
         else:
             return self._clipboard_inject(text)
@@ -52,18 +52,18 @@ class TextInjector:
 
         class KEYBDINPUT(ctypes.Structure):
             _fields_ = [
-                ("wVk", ctypes.c_ushort),
-                ("wScan", ctypes.c_ushort),
-                ("dwFlags", ctypes.c_ulong),
-                ("time", ctypes.c_ulong),
-                ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+                ('wVk', ctypes.c_ushort),
+                ('wScan', ctypes.c_ushort),
+                ('dwFlags', ctypes.c_ulong),
+                ('time', ctypes.c_ulong),
+                ('dwExtraInfo', ctypes.POINTER(ctypes.c_ulong)),
             ]
 
         class INPUT_I(ctypes.Union):
-            _fields_ = [("ki", KEYBDINPUT)]
+            _fields_ = [('ki', KEYBDINPUT)]
 
         class INPUT(ctypes.Structure):
-            _fields_ = [("type", ctypes.c_ulong), ("ii", INPUT_I)]
+            _fields_ = [('type', ctypes.c_ulong), ('ii', INPUT_I)]
 
         inputs = []
         for char in text:
@@ -93,7 +93,7 @@ class TextInjector:
         cbSize = ctypes.sizeof(INPUT)
         sent = self._user32.SendInput(nInputs, pInputs, cbSize)
         if sent != nInputs:
-            raise RuntimeError(f"SendInput sent {sent}/{nInputs} events")
+            raise RuntimeError(f'SendInput sent {sent}/{nInputs} events')
         if self.delay_ms > 0:
             # Имитируем естественный ввод с задержкой
             time.sleep(self.delay_ms / 1000.0 * len(text))
@@ -115,8 +115,8 @@ class TextInjector:
             win32clipboard.EmptyClipboard()
             win32clipboard.SetClipboardText(text, win32con.CF_UNICODETEXT)
             win32clipboard.CloseClipboard()
-            logger.info("text_injected", method="clipboard", length=len(text))
+            logger.info('text_injected', method='clipboard', length=len(text))
             return True
         except Exception as exc:
-            logger.error("clipboard_inject_failed", error=str(exc))
+            logger.error('clipboard_inject_failed', error=str(exc))
             return False

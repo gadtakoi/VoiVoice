@@ -15,7 +15,7 @@ class APIClient:
             base_url: Базовый URL сервера API.
             timeout: Таймаут по умолчанию для HTTP-запросов (в секундах).
         """
-        self.base_url = base_url.rstrip("/")
+        self.base_url = base_url.rstrip('/')
         self.timeout = timeout
         self._client: httpx.AsyncClient | None = None
 
@@ -34,17 +34,17 @@ class APIClient:
         client = await self._get_client()
         # Генерируем короткий trace_id для трассировки запроса в логах
         trace_id = str(uuid.uuid4())[:8]
-        headers = {"X-Trace-ID": trace_id}
-        resp = await client.get(f"{self.base_url}/api/v1/health", headers=headers)
+        headers = {'X-Trace-ID': trace_id}
+        resp = await client.get(f'{self.base_url}/api/v1/health', headers=headers)
         resp.raise_for_status()
         return resp.json()
 
     async def transcribe(
         self,
         audio_bytes: bytes,
-        language: str = "auto",
+        language: str = 'auto',
         cleanup: bool = True,
-        model: str = "medium",
+        model: str = 'medium',
         prompt: str | None = None,
         vad_filter: bool = False,
         hotwords: str | None = None,
@@ -74,20 +74,20 @@ class APIClient:
         """
         client = await self._get_client()
         trace_id = str(uuid.uuid4())[:8]
-        headers = {"X-Trace-ID": trace_id}
+        headers = {'X-Trace-ID': trace_id}
 
         # Формируем multipart-данные: файл + параметры запроса
-        files = {"file": ("audio.wav", audio_bytes, "audio/wav")}
+        files = {'file': ('audio.wav', audio_bytes, 'audio/wav')}
         data = {
-            "language": language,
-            "cleanup": str(cleanup).lower(),
-            "model": model,
-            "vad_filter": str(vad_filter).lower(),
+            'language': language,
+            'cleanup': str(cleanup).lower(),
+            'model': model,
+            'vad_filter': str(vad_filter).lower(),
         }
         if prompt:
-            data["prompt"] = prompt
+            data['prompt'] = prompt
         if hotwords:
-            data["hotwords"] = hotwords
+            data['hotwords'] = hotwords
 
         last_exc: Exception | None = None
         delay = base_delay
@@ -96,13 +96,13 @@ class APIClient:
         for attempt in range(1, max_attempts + 1):
             try:
                 logger.debug(
-                    "transcribe_attempt",
+                    'transcribe_attempt',
                     trace_id=trace_id,
                     attempt=attempt,
                     max_attempts=max_attempts,
                 )
                 resp = await client.post(
-                    f"{self.base_url}/api/v1/transcribe",
+                    f'{self.base_url}/api/v1/transcribe',
                     headers=headers,
                     files=files,
                     data=data,
@@ -111,17 +111,17 @@ class APIClient:
                 resp.raise_for_status()
                 result = resp.json()
                 logger.info(
-                    "transcribe_success",
+                    'transcribe_success',
                     trace_id=trace_id,
                     attempt=attempt,
-                    raw_len=len(result.get("raw", "")),
+                    raw_len=len(result.get('raw', '')),
                 )
                 return result
             except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as exc:
                 # Сетевые ошибки — повторяем запрос
                 last_exc = exc
                 logger.warning(
-                    "transcribe_retry",
+                    'transcribe_retry',
                     trace_id=trace_id,
                     attempt=attempt,
                     error=type(exc).__name__,
@@ -133,19 +133,19 @@ class APIClient:
             except httpx.HTTPStatusError as exc:
                 # HTTP-ошибки — не повторяем, сразу прокидываем исключение
                 logger.error(
-                    "transcribe_http_error",
+                    'transcribe_http_error',
                     trace_id=trace_id,
                     status=exc.response.status_code,
                 )
                 raise
 
         logger.error(
-            "transcribe_failed",
+            'transcribe_failed',
             trace_id=trace_id,
             attempts=max_attempts,
-            error=type(last_exc).__name__ if last_exc else "unknown",
+            error=type(last_exc).__name__ if last_exc else 'unknown',
         )
-        raise last_exc or RuntimeError("Transcribe failed after all retries")
+        raise last_exc or RuntimeError('Transcribe failed after all retries')
 
     async def close(self):
         """Закрытие HTTP-клиента и освобождение ресурсов."""

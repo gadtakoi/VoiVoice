@@ -6,10 +6,10 @@ from loguru import logger
 
 # Сопоставление модификаторов с возможными псевдонимами клавиш
 _KEY_ALIASES = {
-    "ctrl": {"ctrl_l", "ctrl_r"},
-    "alt": {"alt_l", "alt_r", "alt_gr"},
-    "shift": {"shift_l", "shift_r"},
-    "win": {"cmd", "cmd_l", "cmd_r"},
+    'ctrl': {'ctrl_l', 'ctrl_r'},
+    'alt': {'alt_l', 'alt_r', 'alt_gr'},
+    'shift': {'shift_l', 'shift_r'},
+    'win': {'cmd', 'cmd_l', 'cmd_r'},
 }
 
 
@@ -28,9 +28,9 @@ def _normalize_key(key) -> str:
     # Сначала пробуем виртуальный код клавиши (независимо от раскладки)
     try:
         vk = None
-        if hasattr(key, "vk") and key.vk is not None:
+        if hasattr(key, 'vk') and key.vk is not None:
             vk = key.vk
-        elif hasattr(key, "value") and hasattr(key.value, "vk"):
+        elif hasattr(key, 'value') and hasattr(key.value, 'vk'):
             vk = key.value.vk
 
         if vk is not None:
@@ -45,11 +45,11 @@ def _normalize_key(key) -> str:
 
     # Fallback на символ клавиши
     try:
-        if hasattr(key, "char") and key.char:
+        if hasattr(key, 'char') and key.char:
             return key.char.lower()
     except Exception:
         pass
-    return str(key).replace("Key.", "").lower()
+    return str(key).replace('Key.', '').lower()
 
 
 def _match_hotkey(pressed: set[str], required: set[str]) -> bool:
@@ -74,7 +74,7 @@ class HotkeyController:
 
     def __init__(
         self,
-        combination: str = "ctrl+alt+v",
+        combination: str = 'ctrl+alt+v',
         on_press: Callable | None = None,
         on_release: Callable | None = None,
     ):
@@ -89,7 +89,7 @@ class HotkeyController:
         self.on_press = on_press
         self.on_release = on_release
         self._listening = False
-        self._backend = "keyboard"
+        self._backend = 'keyboard'
         self._pynput_listener = None
         self._pynput_pressed: set[str] = set()
         self._keyboard_active = False
@@ -101,26 +101,26 @@ class HotkeyController:
         На Windows предпочитает pynput (не требует прав администратора),
         на Linux — keyboard. При неудаче пробует fallback-бэкенд.
         """
-        if sys.platform == "win32":
+        if sys.platform == 'win32':
             primary, fallback = self._start_pynput, self._start_keyboard
-            primary_name, fallback_name = "pynput", "keyboard"
+            primary_name, fallback_name = 'pynput', 'keyboard'
         else:
             primary, fallback = self._start_keyboard, self._start_pynput
-            primary_name, fallback_name = "keyboard", "pynput"
+            primary_name, fallback_name = 'keyboard', 'pynput'
 
         try:
             primary()
             self._backend = primary_name
-            logger.info("hotkey_started", combination=self.combination, backend=primary_name)
+            logger.info('hotkey_started', combination=self.combination, backend=primary_name)
         except Exception as exc:
-            logger.warning(f"{primary_name}_backend_failed", error=str(exc), fallback=fallback_name)
+            logger.warning(f'{primary_name}_backend_failed', error=str(exc), fallback=fallback_name)
             try:
                 fallback()
                 self._backend = fallback_name
-                logger.info("hotkey_started", combination=self.combination, backend=fallback_name)
+                logger.info('hotkey_started', combination=self.combination, backend=fallback_name)
             except Exception as exc2:
                 logger.error(
-                    "hotkey_start_failed", **{f"{primary_name}_error": str(exc), f"{fallback_name}_error": str(exc2)}
+                    'hotkey_start_failed', **{f'{primary_name}_error': str(exc), f'{fallback_name}_error': str(exc2)}
                 )
                 raise
 
@@ -128,18 +128,18 @@ class HotkeyController:
         """Останавливает прослушивание и освобождает хуки."""
         self._listening = False
         self._active = False
-        if self._backend == "keyboard":
+        if self._backend == 'keyboard':
             try:
                 import keyboard
 
                 keyboard.unhook_all()
             except Exception as exc:
-                logger.warning("hotkey_stop_failed", error=str(exc))
-        elif self._backend == "pynput" and self._pynput_listener:
+                logger.warning('hotkey_stop_failed', error=str(exc))
+        elif self._backend == 'pynput' and self._pynput_listener:
             try:
                 self._pynput_listener.stop()
             except Exception as exc:
-                logger.warning("pynput_stop_failed", error=str(exc))
+                logger.warning('pynput_stop_failed', error=str(exc))
 
     def _start_keyboard(self):
         """Запуск через библиотеку keyboard (хуки на уровне ОС)."""
@@ -149,11 +149,11 @@ class HotkeyController:
         # Хукаем 'v' и вручную проверяем модификаторы.
         def on_v_press(_event=None):
             try:
-                if keyboard.is_pressed("ctrl") and keyboard.is_pressed("alt"):
+                if keyboard.is_pressed('ctrl') and keyboard.is_pressed('alt'):
                     self._keyboard_active = True
                     self._handle_press()
             except Exception:
-                logger.exception("keyboard_press_callback_error")
+                logger.exception('keyboard_press_callback_error')
 
         def on_v_release(_event=None):
             try:
@@ -161,17 +161,17 @@ class HotkeyController:
                     self._keyboard_active = False
                     self._handle_release()
             except Exception:
-                logger.exception("keyboard_release_callback_error")
+                logger.exception('keyboard_release_callback_error')
 
-        keyboard.on_press_key("v", on_v_press)
-        keyboard.on_release_key("v", on_v_release)
+        keyboard.on_press_key('v', on_v_press)
+        keyboard.on_release_key('v', on_v_release)
         self._listening = True
 
     def _start_pynput(self):
         """Запуск через библиотеку pynput (cross-platform)."""
         from pynput import keyboard as pynput_keyboard
 
-        required = set(self.combination.split("+"))
+        required = set(self.combination.split('+'))
         self._pynput_pressed = set()
 
         def on_press(key):
@@ -198,7 +198,7 @@ class HotkeyController:
         if not self._listening or self._active:
             return
         self._active = True
-        logger.debug("hotkey_pressed")
+        logger.debug('hotkey_pressed')
         if self.on_press:
             # Запускаем обработчик в отдельном потоке, чтобы
             # хук pynput на Windows вернул управление немедленно.
@@ -209,14 +209,14 @@ class HotkeyController:
         try:
             self.on_press()
         except Exception as exc:
-            logger.error("hotkey_press_handler_error", error=str(exc))
+            logger.error('hotkey_press_handler_error', error=str(exc))
 
     def _handle_release(self):
         """Внутренний обработчик отпускания клавиш."""
         if not self._listening:
             return
         self._active = False
-        logger.debug("hotkey_released")
+        logger.debug('hotkey_released')
         if self.on_release:
             threading.Thread(target=self._run_release_handler, daemon=True).start()
 
@@ -225,4 +225,4 @@ class HotkeyController:
         try:
             self.on_release()
         except Exception as exc:
-            logger.error("hotkey_release_handler_error", error=str(exc))
+            logger.error('hotkey_release_handler_error', error=str(exc))

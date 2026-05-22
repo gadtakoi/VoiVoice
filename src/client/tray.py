@@ -10,11 +10,11 @@ from PIL import Image, ImageDraw
 class TrayState(Enum):
     """Возможные состояния иконки в системном трее."""
 
-    IDLE = "idle"
-    LISTENING = "listening"
-    PROCESSING = "processing"
-    ERROR = "error"
-    OFFLINE = "offline"
+    IDLE = 'idle'
+    LISTENING = 'listening'
+    PROCESSING = 'processing'
+    ERROR = 'error'
+    OFFLINE = 'offline'
 
 
 class TrayController:
@@ -41,8 +41,8 @@ class TrayController:
         self._on_language_change = on_language_change
         self._on_cleanup_change = on_cleanup_change
         self._paused = False
-        self._language = "Auto"
-        self._cleanup = "LLM"
+        self._language = 'Auto'
+        self._cleanup = 'LLM'
         self._icon: pystray.Icon | None = None
 
     def _create_icon_image(self, color: str) -> Image.Image:
@@ -56,7 +56,7 @@ class TrayController:
         """
         width = 64
         height = 64
-        image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        image = Image.new('RGBA', (width, height), (0, 0, 0, 0))
         dc = ImageDraw.Draw(image)
         dc.ellipse([4, 4, width - 4, height - 4], fill=color)
         return image
@@ -64,55 +64,55 @@ class TrayController:
     def _get_icon_for_state(self) -> Image.Image:
         """Возвращает иконку, соответствующую текущему состоянию."""
         colors = {
-            TrayState.IDLE: "#000000",
-            TrayState.LISTENING: "#FF0000",
-            TrayState.PROCESSING: "#FFD700",
-            TrayState.ERROR: "#FF4500",
-            TrayState.OFFLINE: "#A9A9A9",
+            TrayState.IDLE: '#000000',
+            TrayState.LISTENING: '#FF0000',
+            TrayState.PROCESSING: '#FFD700',
+            TrayState.ERROR: '#FF4500',
+            TrayState.OFFLINE: '#A9A9A9',
         }
-        return self._create_icon_image(colors.get(self._state, "#808080"))
+        return self._create_icon_image(colors.get(self._state, '#808080'))
 
     def _get_tooltip(self) -> str:
         """Возвращает подсказку (tooltip) для текущего состояния."""
         tooltips = {
-            TrayState.IDLE: f"VoiVoice — Готов ({self._language})",
-            TrayState.LISTENING: "VoiVoice — Запись...",
-            TrayState.PROCESSING: "VoiVoice — Обработка...",
-            TrayState.ERROR: "VoiVoice — Ошибка",
-            TrayState.OFFLINE: "VoiVoice — Сервисы недоступны",
+            TrayState.IDLE: f'VoiVoice — Готов ({self._language})',
+            TrayState.LISTENING: 'VoiVoice — Запись...',
+            TrayState.PROCESSING: 'VoiVoice — Обработка...',
+            TrayState.ERROR: 'VoiVoice — Ошибка',
+            TrayState.OFFLINE: 'VoiVoice — Сервисы недоступны',
         }
-        return tooltips.get(self._state, "VoiVoice")
+        return tooltips.get(self._state, 'VoiVoice')
 
     def _build_menu(self) -> pystray.Menu:
         """Формирует контекстное меню иконки трея."""
         return pystray.Menu(
-            pystray.MenuItem("VoiVoice v0.1.0", lambda icon, item: None, enabled=False),
+            pystray.MenuItem('VoiVoice v0.1.0', lambda icon, item: None, enabled=False),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
-                lambda text: "▶️ Возобновить" if self._paused else "⏸️ Пауза",
+                lambda text: '▶️ Возобновить' if self._paused else '⏸️ Пауза',
                 self._handle_toggle_pause,
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
-                lambda text: f"🌐 Язык: {self._language}",
+                lambda text: f'🌐 Язык: {self._language}',
                 pystray.Menu(
-                    pystray.MenuItem("Auto", lambda icon, item: self._set_language("Auto")),
-                    pystray.MenuItem("RU", lambda icon, item: self._set_language("RU")),
-                    pystray.MenuItem("EN", lambda icon, item: self._set_language("EN")),
+                    pystray.MenuItem('Auto', lambda icon, item: self._set_language('Auto')),
+                    pystray.MenuItem('RU', lambda icon, item: self._set_language('RU')),
+                    pystray.MenuItem('EN', lambda icon, item: self._set_language('EN')),
                 ),
             ),
             pystray.MenuItem(
-                lambda text: f"🧹 Cleanup: {self._cleanup}",
+                lambda text: f'🧹 Cleanup: {self._cleanup}',
                 pystray.Menu(
-                    pystray.MenuItem("LLM", lambda icon, item: self._set_cleanup("LLM")),
-                    pystray.MenuItem("None", lambda icon, item: self._set_cleanup("None")),
+                    pystray.MenuItem('LLM', lambda icon, item: self._set_cleanup('LLM')),
+                    pystray.MenuItem('None', lambda icon, item: self._set_cleanup('None')),
                 ),
             ),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("⚙️ Настройки", self._handle_settings),
-            pystray.MenuItem("📋 Открыть логи", self._handle_logs),
+            pystray.MenuItem('⚙️ Настройки', self._handle_settings),
+            pystray.MenuItem('📋 Открыть логи', self._handle_logs),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("❌ Выход", self._handle_quit),
+            pystray.MenuItem('❌ Выход', self._handle_quit),
         )
 
     def _set_language(self, lang: str):
@@ -122,7 +122,7 @@ class TrayController:
             self._on_language_change(lang)
         if self._icon:
             self._icon.update_menu()
-        logger.info("tray_language_changed", language=lang)
+        logger.info('tray_language_changed', language=lang)
 
     def _set_cleanup(self, mode: str):
         """Устанавливает режим cleanup и обновляет меню."""
@@ -131,7 +131,7 @@ class TrayController:
             self._on_cleanup_change(mode)
         if self._icon:
             self._icon.update_menu()
-        logger.info("tray_cleanup_changed", mode=mode)
+        logger.info('tray_cleanup_changed', mode=mode)
 
     def _handle_toggle_pause(self, icon: pystray.Icon, item: pystray.MenuItem):
         """Обработчик переключения паузы из меню."""
@@ -139,23 +139,23 @@ class TrayController:
         if self._on_toggle_pause:
             self._on_toggle_pause(self._paused)
         icon.update_menu()
-        logger.info("tray_pause_toggled", paused=self._paused)
+        logger.info('tray_pause_toggled', paused=self._paused)
 
     def _handle_settings(self, icon: pystray.Icon, item: pystray.MenuItem):
         """Открывает config.yaml в редакторе по умолчанию."""
-        os.startfile("config.yaml")
+        os.startfile('config.yaml')
 
     def _handle_logs(self, icon: pystray.Icon, item: pystray.MenuItem):
         """Открывает папку с логами."""
-        log_dir = "logs"
+        log_dir = 'logs'
         if os.path.exists(log_dir):
             os.startfile(log_dir)
         else:
-            logger.warning("logs_directory_not_found")
+            logger.warning('logs_directory_not_found')
 
     def _handle_quit(self, icon: pystray.Icon, item: pystray.MenuItem):
         """Обработчик выхода из приложения."""
-        logger.info("tray_quit_requested")
+        logger.info('tray_quit_requested')
         if self._on_quit:
             self._on_quit()
         icon.stop()
@@ -163,7 +163,7 @@ class TrayController:
     def start(self):
         """Запускает цикл отображения иконки в трее (блокирующий вызов)."""
         self._icon = pystray.Icon(
-            "voivoice",
+            'voivoice',
             icon=self._get_icon_for_state(),
             title=self._get_tooltip(),
             menu=self._build_menu(),
@@ -187,7 +187,7 @@ class TrayController:
         if self._icon:
             self._icon.icon = self._get_icon_for_state()
             self._icon.title = self._get_tooltip()
-        logger.info("tray_state_changed", state=state.value)
+        logger.info('tray_state_changed', state=state.value)
 
     @property
     def state(self) -> TrayState:

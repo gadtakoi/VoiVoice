@@ -3,7 +3,7 @@
 import ctypes
 from ctypes import wintypes
 
-print("=== Диагностика микрофона ===\n")
+print('=== Диагностика микрофона ===\n')
 
 # 1. Проверка waveInOpen (Windows MME)
 winmm = ctypes.windll.winmm
@@ -12,13 +12,13 @@ winmm = ctypes.windll.winmm
 class WAVEFORMATEX(ctypes.Structure):
     _pack_ = 1
     _fields_ = [
-        ("wFormatTag", wintypes.WORD),
-        ("nChannels", wintypes.WORD),
-        ("nSamplesPerSec", wintypes.DWORD),
-        ("nAvgBytesPerSec", wintypes.DWORD),
-        ("nBlockAlign", wintypes.WORD),
-        ("wBitsPerSample", wintypes.WORD),
-        ("cbSize", wintypes.WORD),
+        ('wFormatTag', wintypes.WORD),
+        ('nChannels', wintypes.WORD),
+        ('nSamplesPerSec', wintypes.DWORD),
+        ('nAvgBytesPerSec', wintypes.DWORD),
+        ('nBlockAlign', wintypes.WORD),
+        ('wBitsPerSample', wintypes.WORD),
+        ('cbSize', wintypes.WORD),
     ]
 
 
@@ -34,10 +34,10 @@ wf.cbSize = 0
 
 result = winmm.waveInOpen(ctypes.byref(hwi), -1, ctypes.byref(wf), 0, 0, 0)
 if result == 0:
-    print("[OK]  waveInOpen (MME) работает")
+    print('[OK]  waveInOpen (MME) работает')
     winmm.waveInClose(hwi)
 else:
-    print(f"[FAIL] waveInOpen (MME) вернул ошибку: {result}")
+    print(f'[FAIL] waveInOpen (MME) вернул ошибку: {result}')
 
 # 2. Проверка WASAPI capture через pycaw/comtypes
 try:
@@ -45,8 +45,8 @@ try:
 
     _orig = ctypes.util.find_library
     ctypes.util.find_library = lambda name: (
-        name + ".dll"
-        if name in ("ole32", "kernel32", "user32", "advapi32", "shell32", "winmm", "oleaut32")
+        name + '.dll'
+        if name in ('ole32', 'kernel32', 'user32', 'advapi32', 'shell32', 'winmm', 'oleaut32')
         else _orig(name)
     )
 
@@ -58,7 +58,7 @@ try:
     from pycaw.constants import AudioDeviceState
     from pycaw.pycaw import AudioUtilities
 
-    warnings.filterwarnings("ignore")
+    warnings.filterwarnings('ignore')
 
     capture_ok = False
     for dev in AudioUtilities.GetAllDevices():
@@ -77,16 +77,16 @@ try:
             fmt = ac.GetMixFormat()
             hr = ac.Initialize(0, 0, 0, 0, fmt[0], None)
             if hr == 0:
-                print(f"[OK]  WASAPI Initialize работает ({dev.FriendlyName})")
+                print(f'[OK]  WASAPI Initialize работает ({dev.FriendlyName})')
                 capture_ok = True
             else:
-                print(f"[FAIL] WASAPI Initialize вернул 0x{hr & 0xFFFFFFFF:08X} ({dev.FriendlyName})")
+                print(f'[FAIL] WASAPI Initialize вернул 0x{hr & 0xFFFFFFFF:08X} ({dev.FriendlyName})')
         except Exception as e:
-            print(f"[FAIL] WASAPI ошибка для {dev.FriendlyName}: {e}")
+            print(f'[FAIL] WASAPI ошибка для {dev.FriendlyName}: {e}')
 
     if not capture_ok:
-        print("[FAIL] WASAPI Initialize не работает ни на одном микрофоне")
+        print('[FAIL] WASAPI Initialize не работает ни на одном микрофоне')
 except Exception as e:
-    print(f"[SKIP] WASAPI тест не удался: {e}")
+    print(f'[SKIP] WASAPI тест не удался: {e}')
 
-print("\n=== Конец диагностики ===")
+print('\n=== Конец диагностики ===')

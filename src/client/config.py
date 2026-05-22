@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class HotkeyConfig(BaseSettings):
     """Настройки горячей клавиши для активации записи."""
 
-    combination: str = "ctrl+alt+v"
+    combination: str = 'ctrl+alt+v'
     hold_to_record: bool = True
 
 
@@ -16,7 +16,7 @@ class AudioConfig(BaseSettings):
 
     sample_rate: int = 16000
     channels: int = 1
-    dtype: str = "int16"
+    dtype: str = 'int16'
     chunk_duration_ms: int = 30
     vad_threshold: float = 0.5
     silence_timeout_ms: int = 500
@@ -26,13 +26,13 @@ class AudioConfig(BaseSettings):
 class ServicesConfig(BaseSettings):
     """Настройки подключения к внешним сервисам (ASR, LLM)."""
 
-    api_url: str = "http://localhost:8080"
-    asr_model: str = "medium"
-    asr_language: str = "ru"
-    asr_prompt: str = "Это диктовка на русском языке. Соблюдай орфографию и пунктуацию."
+    api_url: str = 'http://localhost:8080'
+    asr_model: str = 'medium'
+    asr_language: str = 'ru'
+    asr_prompt: str = 'Это диктовка на русском языке. Соблюдай орфографию и пунктуацию.'
     asr_vad_filter: bool = True
-    asr_hotwords: str = ""
-    llm_model: str = "llama3.2:3b"
+    asr_hotwords: str = ''
+    llm_model: str = 'llama3.2:3b'
     cleanup_enabled: bool = True
     fallback_to_raw: bool = True
 
@@ -47,16 +47,16 @@ class TrayConfig(BaseSettings):
 class InjectionConfig(BaseSettings):
     """Настройки вставки текста в активное окно."""
 
-    method: str = "sendinput"
+    method: str = 'sendinput'
     delay_between_chars_ms: int = 10
 
 
 class LoggingConfig(BaseSettings):
     """Настройки логирования."""
 
-    level: str = "INFO"
-    format: str = "json"
-    directory: str = "./logs"
+    level: str = 'INFO'
+    format: str = 'json'
+    directory: str = './logs'
     rotation_mb: int = 10
     retention_days: int = 7
 
@@ -83,10 +83,10 @@ class Config(BaseSettings):
     и YAML-файла config.yaml.
     """
 
-    model_config = SettingsConfigDict(env_prefix="VOIVOICE_", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix='VOIVOICE_', extra='ignore')
 
-    app_name: str = "VoiVoice"
-    app_version: str = "0.1.0"
+    app_name: str = 'VoiVoice'
+    app_version: str = '0.1.0'
     hotkey: HotkeyConfig = HotkeyConfig()
     audio: AudioConfig = AudioConfig()
     services: ServicesConfig = ServicesConfig()
@@ -96,7 +96,7 @@ class Config(BaseSettings):
     retry: RetrySection = RetrySection()
 
     @classmethod
-    def from_yaml(cls, path: Path | None = None) -> "Config":
+    def from_yaml(cls, path: Path | None = None) -> 'Config':
         """Загружает конфигурацию из YAML-файла.
 
         Args:
@@ -106,9 +106,9 @@ class Config(BaseSettings):
             Экземпляр Config с параметрами из файла (или значениями по умолчанию).
         """
         if path is None:
-            path = Path("config.yaml")
+            path = Path('config.yaml')
         if not path.exists():
             return cls()
-        with open(path, encoding="utf-8") as f:
+        with open(path, encoding='utf-8') as f:
             data = yaml.safe_load(f) or {}
         return cls(**data)
