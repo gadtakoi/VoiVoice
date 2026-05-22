@@ -17,6 +17,7 @@ dependencies = [
     "onnxruntime>=1.18",
     "loguru>=0.7",
     "structlog>=24.0",
+    "scipy>=1.13",
     "windows-toasts>=1.0; platform_system=='Windows'",
 ]
 

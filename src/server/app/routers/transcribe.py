@@ -17,21 +17,37 @@ DEFAULT_LLM_MODEL = os.getenv("DEFAULT_LLM_MODEL", "llama3.2:3b")
 # Prompt template for cleanup
 CLEANUP_PROMPT = """You are an AI dictation assistant. Clean up the following raw speech transcript.
 Rules:
-- Remove filler words (uh, um, like, you know, ну типа, эм)
-- Add proper punctuation
+- Remove filler words (uh, um, like, you know, ну типа, эм, короче, значит)
+- Add proper punctuation for Russian: use em-dash (—) for direct speech, «ёлочки» for quotes
 - Fix grammar and capitalization
 - Preserve the original language
+- Do NOT change words unless they are obvious speech errors
 - Output ONLY the cleaned text, no explanations
 
 Raw: {text}
 Cleaned:"""
 
 
-async def _call_asr(audio: bytes, language: str) -> dict:
-    timeout = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
+async def _call_asr(
+    audio: bytes,
+    language: str,
+    model: str,
+    prompt: Optional[str] = None,
+    vad_filter: bool = False,
+    hotwords: Optional[str] = None,
+) -> dict:
+    timeout = httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
         files = {"file": ("audio.wav", audio, "audio/wav")}
-        data = {"model": "base", "language": language if language != "auto" else None}
+        data: dict = {
+            "model": model,
+            "language": language if language != "auto" else None,
+            "vad_filter": vad_filter,
+        }
+        if prompt:
+            data["prompt"] = prompt
+        if hotwords:
+            data["hotwords"] = hotwords
         data = {k: v for k, v in data.items() if v is not None}
 
         response = await client.post(f"{ASR_URL}/v1/audio/transcriptions", files=files, data=data)
@@ -63,6 +79,10 @@ async def transcribe(
     file: UploadFile = File(...),
     language: Optional[str] = Form("auto"),
     cleanup: bool = Form(True),
+    model: Optional[str] = Form("small"),
+    prompt: Optional[str] = Form(None),
+    vad_filter: bool = Form(False),
+    hotwords: Optional[str] = Form(None),
 ) -> TranscribeResponse:
     start_time = time.perf_counter()
     trace_id = os.urandom(8).hex()
@@ -78,7 +98,14 @@ async def transcribe(
     # ASR
     asr_start = time.perf_counter()
     try:
-        asr_result = await _call_asr(audio, language)
+        asr_result = await _call_asr(
+            audio,
+            language=language,
+            model=model or "medium",
+            prompt=prompt,
+            vad_filter=vad_filter,
+            hotwords=hotwords,
+        )
     except httpx.HTTPStatusError as exc:
         logger.error("asr_http_error", trace_id=trace_id, status=exc.response.status_code)
         raise HTTPException(status_code=502, detail="ASR service error") from exc

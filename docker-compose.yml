@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   asr:
     image: fedirz/faster-whisper-server:latest-cpu
@@ -7,16 +5,16 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./models/whisper:/models:ro
+      - ./models/whisper:/models
     environment:
-      - WHISPER_MODEL=base
+      - WHISPER__MODEL=Systran/faster-whisper-small
       - WHISPER_LANGUAGE=ru
       - WHISPER_COMPUTE_TYPE=int8
       - WHISPER_CPU_THREADS=4
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 4G
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]

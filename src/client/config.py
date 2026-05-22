@@ -21,7 +21,11 @@ class AudioConfig(BaseSettings):
 
 class ServicesConfig(BaseSettings):
     api_url: str = "http://localhost:8080"
-    asr_model: str = "base"
+    asr_model: str = "medium"
+    asr_language: str = "ru"
+    asr_prompt: str = "Это диктовка на русском языке. Соблюдай орфографию и пунктуацию."
+    asr_vad_filter: bool = True
+    asr_hotwords: str = ""
     llm_model: str = "llama3.2:3b"
     cleanup_enabled: bool = True
     fallback_to_raw: bool = True

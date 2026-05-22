@@ -29,6 +29,10 @@ class APIClient:
         audio_bytes: bytes,
         language: str = "auto",
         cleanup: bool = True,
+        model: str = "medium",
+        prompt: Optional[str] = None,
+        vad_filter: bool = False,
+        hotwords: Optional[str] = None,
         max_attempts: int = 3,
         base_delay: float = 0.5,
         multiplier: float = 2.0,
@@ -38,7 +42,16 @@ class APIClient:
         headers = {"X-Trace-ID": trace_id}
 
         files = {"file": ("audio.wav", audio_bytes, "audio/wav")}
-        data = {"language": language, "cleanup": str(cleanup).lower()}
+        data = {
+            "language": language,
+            "cleanup": str(cleanup).lower(),
+            "model": model,
+            "vad_filter": str(vad_filter).lower(),
+        }
+        if prompt:
+            data["prompt"] = prompt
+        if hotwords:
+            data["hotwords"] = hotwords
 
         last_exc: Optional[Exception] = None
         delay = base_delay

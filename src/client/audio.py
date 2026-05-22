@@ -7,6 +7,11 @@ import sounddevice as sd
 import onnxruntime as ort
 from loguru import logger
 
+try:
+    from scipy import signal
+except Exception:
+    signal = None  # type: ignore[assignment]
+
 
 import os
 
@@ -89,21 +94,48 @@ class AudioCapture:
             logger.warning("vad_init_failed", error=str(exc))
 
     def _resample(self, audio: np.ndarray, orig_sr: int, target_sr: int) -> np.ndarray:
-        """Fast linear resample using numpy interp."""
+        """Resample audio using FFT-based method (scipy) or linear fallback."""
         if orig_sr == target_sr:
             return audio
         audio_float = audio.astype(np.float32)
         duration = len(audio_float) / orig_sr
         target_len = int(duration * target_sr)
-        old_x = np.linspace(0, 1, len(audio_float))
-        new_x = np.linspace(0, 1, target_len)
-        if audio_float.ndim == 1:
-            resampled = np.interp(new_x, old_x, audio_float)
+        if signal is not None:
+            # FFT-based resample gives much better quality than linear interp
+            resampled = signal.resample(audio_float, target_len)
         else:
-            resampled = np.zeros((target_len, audio_float.shape[1]), dtype=np.float32)
-            for ch in range(audio_float.shape[1]):
-                resampled[:, ch] = np.interp(new_x, old_x, audio_float[:, ch])
+            old_x = np.linspace(0, 1, len(audio_float))
+            new_x = np.linspace(0, 1, target_len)
+            if audio_float.ndim == 1:
+                resampled = np.interp(new_x, old_x, audio_float)
+            else:
+                resampled = np.zeros((target_len, audio_float.shape[1]), dtype=np.float32)
+                for ch in range(audio_float.shape[1]):
+                    resampled[:, ch] = np.interp(new_x, old_x, audio_float[:, ch])
         return resampled.astype(audio.dtype)
+
+    @staticmethod
+    def _highpass_filter(audio: np.ndarray, sr: int, cutoff: float = 80.0) -> np.ndarray:
+        """Apply a 2nd-order Butterworth high-pass filter to remove rumble."""
+        if signal is None or audio.size < 10:
+            return audio
+        audio_float = audio.astype(np.float32)
+        sos = signal.butter(2, cutoff, btype="high", fs=sr, output="sos")
+        filtered = signal.sosfilt(sos, audio_float)
+        return filtered.astype(audio.dtype)
+
+    @staticmethod
+    def _normalize_audio(audio: np.ndarray, target_rms: float = 0.05) -> np.ndarray:
+        """Normalize audio to a target RMS level (relative to int16 max)."""
+        audio_float = audio.astype(np.float32)
+        rms = np.sqrt(np.mean(audio_float**2))
+        if rms == 0:
+            return audio
+        gain = target_rms * np.iinfo(np.int16).max / rms
+        # Limit gain to avoid clipping (max 20 dB boost)
+        gain = min(gain, 10.0)
+        normalized = np.clip(audio_float * gain, np.iinfo(np.int16).min, np.iinfo(np.int16).max)
+        return normalized.astype(audio.dtype)
 
     def _callback(self, indata: np.ndarray, frames: int, time_info, status):
         if status:
@@ -219,6 +251,9 @@ class AudioCapture:
                 to_sr=self.sample_rate,
             )
             audio = self._resample(audio, self._actual_sample_rate, self.sample_rate)
+        # Pre-processing: high-pass filter + normalization
+        audio = self._highpass_filter(audio, self.sample_rate, cutoff=80.0)
+        audio = self._normalize_audio(audio, target_rms=0.05)
         wav_bytes = self._encode_wav(audio)
         duration_ms = int(len(audio) / self.sample_rate * 1000)
         logger.info("audio_capture_stopped", duration_ms=duration_ms, samples=len(audio))

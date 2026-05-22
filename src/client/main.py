@@ -187,7 +187,9 @@ class VoiVoiceClient:
             self.timing.mark("encode_wav")
 
             language_map = {"Auto": "auto", "RU": "ru", "EN": "en"}
-            language = language_map.get(self.tray.language, "auto")
+            tray_lang = language_map.get(self.tray.language, "auto")
+            # Use config language unless tray explicitly overrides it
+            language = self.config.services.asr_language if tray_lang == "auto" else tray_lang
             cleanup = self.config.services.cleanup_enabled
 
             self.timing.mark("network_upload")
@@ -195,6 +197,10 @@ class VoiVoiceClient:
                 audio_bytes=wav_bytes,
                 language=language,
                 cleanup=cleanup,
+                model=self.config.services.asr_model,
+                prompt=self.config.services.asr_prompt or None,
+                vad_filter=self.config.services.asr_vad_filter,
+                hotwords=self.config.services.asr_hotwords or None,
                 max_attempts=self.config.retry.asr.max_attempts,
                 base_delay=self.config.retry.asr.base_delay,
                 multiplier=self.config.retry.asr.multiplier,

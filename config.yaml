@@ -17,7 +17,11 @@ audio:
 
 services:
   api_url: "http://localhost:8080"
-  asr_model: "base"
+  asr_model: "small"
+  asr_language: "ru"
+  asr_prompt: "Это диктовка на русском языке. Соблюдай орфографию и пунктуацию."
+  asr_vad_filter: true
+  asr_hotwords: ""
   llm_model: "llama3.2:3b"
   cleanup_enabled: true
   fallback_to_raw: true
