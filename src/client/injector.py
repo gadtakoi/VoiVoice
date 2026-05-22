@@ -5,14 +5,28 @@ from loguru import logger
 
 
 class TextInjector:
-    """Inject text into the active window using SendInput or clipboard."""
+    """Инжектор текста в активное окно через SendInput или буфер обмена."""
 
     def __init__(self, method: str = "sendinput", delay_ms: int = 10):
+        """Инициализация инжектора.
+
+        Args:
+            method: Способ вставки — "sendinput" или "clipboard".
+            delay_ms: Задержка между символами (мс), только для sendinput.
+        """
         self.method = method
         self.delay_ms = delay_ms
         self._user32 = ctypes.windll.user32
 
     def inject(self, text: str) -> bool:
+        """Вставляет текст в активное окно выбранным способом.
+
+        Args:
+            text: Текст для вставки.
+
+        Returns:
+            True при успехе, False при ошибке.
+        """
         if not text:
             return True
         if self.method == "sendinput":
@@ -27,7 +41,11 @@ class TextInjector:
             return self._clipboard_inject(text)
 
     def _send_input(self, text: str):
-        # SendInput with Unicode characters
+        """Низкоуровневая вставка через Win32 SendInput с Unicode-символами.
+
+        Args:
+            text: Текст для посимвольной отправки.
+        """
         INPUT_KEYBOARD = 1
         KEYEVENTF_UNICODE = 0x0004
         KEYEVENTF_KEYUP = 0x0002
@@ -49,7 +67,7 @@ class TextInjector:
 
         inputs = []
         for char in text:
-            # Key down
+            # Нажатие клавиши
             inp = INPUT()
             inp.type = INPUT_KEYBOARD
             inp.ii.ki.wVk = 0
@@ -59,7 +77,7 @@ class TextInjector:
             inp.ii.ki.dwExtraInfo = None
             inputs.append(inp)
 
-            # Key up
+            # Отпускание клавиши
             inp_up = INPUT()
             inp_up.type = INPUT_KEYBOARD
             inp_up.ii.ki.wVk = 0
@@ -77,9 +95,18 @@ class TextInjector:
         if sent != nInputs:
             raise RuntimeError(f"SendInput sent {sent}/{nInputs} events")
         if self.delay_ms > 0:
+            # Имитируем естественный ввод с задержкой
             time.sleep(self.delay_ms / 1000.0 * len(text))
 
     def _clipboard_inject(self, text: str) -> bool:
+        """Резервный способ вставки через системный буфер обмена.
+
+        Args:
+            text: Текст для копирования.
+
+        Returns:
+            True при успехе, False при ошибке.
+        """
         try:
             import win32clipboard
             import win32con

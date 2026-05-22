@@ -6,18 +6,33 @@ from loguru import logger
 
 
 class APIClient:
+    """Асинхронный HTTP-клиент для взаимодействия с VoiVoice API."""
+
     def __init__(self, base_url: str, timeout: float = 30.0):
+        """Инициализация клиента.
+
+        Args:
+            base_url: Базовый URL сервера API.
+            timeout: Таймаут по умолчанию для HTTP-запросов (в секундах).
+        """
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self._client: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
+        """Ленивое создание или переиспользование httpx.AsyncClient."""
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(timeout=self.timeout)
         return self._client
 
     async def health(self) -> dict:
+        """Проверка состояния сервера.
+
+        Returns:
+            Ответ сервера в виде словаря.
+        """
         client = await self._get_client()
+        # Генерируем короткий trace_id для трассировки запроса в логах
         trace_id = str(uuid.uuid4())[:8]
         headers = {"X-Trace-ID": trace_id}
         resp = await client.get(f"{self.base_url}/api/v1/health", headers=headers)
@@ -37,10 +52,31 @@ class APIClient:
         base_delay: float = 0.5,
         multiplier: float = 2.0,
     ) -> dict:
+        """Отправка аудио на сервер для транскрипции с повторными попытками при сетевых ошибках.
+
+        Args:
+            audio_bytes: Сырые байты WAV-файла.
+            language: Код языка (например, "ru", "en" или "auto").
+            cleanup: Флаг постобработки текста через LLM.
+            model: Название модели ASR.
+            prompt: Опциональный промпт для ASR.
+            vad_filter: Включить фильтрацию голосовой активности.
+            hotwords: Горячие слова для улучшения распознавания.
+            max_attempts: Максимальное число повторных попыток.
+            base_delay: Начальная задержка между попытками (в секундах).
+            multiplier: Множитель экспоненциального роста задержки.
+
+        Returns:
+            Результат транскрипции от сервера.
+
+        Raises:
+            Exception: Последняя произошедшая ошибка после исчерпания попыток.
+        """
         client = await self._get_client()
         trace_id = str(uuid.uuid4())[:8]
         headers = {"X-Trace-ID": trace_id}
 
+        # Формируем multipart-данные: файл + параметры запроса
         files = {"file": ("audio.wav", audio_bytes, "audio/wav")}
         data = {
             "language": language,
@@ -56,6 +92,7 @@ class APIClient:
         last_exc: Exception | None = None
         delay = base_delay
 
+        # Цикл повторных попыток с экспоненциальной задержкой
         for attempt in range(1, max_attempts + 1):
             try:
                 logger.debug(
@@ -81,6 +118,7 @@ class APIClient:
                 )
                 return result
             except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as exc:
+                # Сетевые ошибки — повторяем запрос
                 last_exc = exc
                 logger.warning(
                     "transcribe_retry",
@@ -93,6 +131,7 @@ class APIClient:
                     await asyncio.sleep(delay)
                     delay *= multiplier
             except httpx.HTTPStatusError as exc:
+                # HTTP-ошибки — не повторяем, сразу прокидываем исключение
                 logger.error(
                     "transcribe_http_error",
                     trace_id=trace_id,
@@ -109,5 +148,6 @@ class APIClient:
         raise last_exc or RuntimeError("Transcribe failed after all retries")
 
     async def close(self):
+        """Закрытие HTTP-клиента и освобождение ресурсов."""
         if self._client and not self._client.is_closed:
             await self._client.aclose()

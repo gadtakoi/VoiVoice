@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 from loguru import logger
 
+# Сопоставление модификаторов с возможными псевдонимами клавиш
 _KEY_ALIASES = {
     "ctrl": {"ctrl_l", "ctrl_r"},
     "alt": {"alt_l", "alt_r", "alt_gr"},
@@ -13,8 +14,18 @@ _KEY_ALIASES = {
 
 
 def _normalize_key(key) -> str:
-    """Convert pynput key to normalized string, layout-independent for latin letters."""
-    # Handle virtual key codes first (layout independent)
+    """Приводит объект клавиши pynput к нормализованной строке.
+
+    Использует виртуальные коды клавиш (VK) для независимости от раскладки
+    при работе с латинскими буквами и цифрами.
+
+    Args:
+        key: Объект клавиши от pynput.
+
+    Returns:
+        Нормализованное строковое представление клавиши.
+    """
+    # Сначала пробуем виртуальный код клавиши (независимо от раскладки)
     try:
         vk = None
         if hasattr(key, "vk") and key.vk is not None:
@@ -23,15 +34,16 @@ def _normalize_key(key) -> str:
             vk = key.value.vk
 
         if vk is not None:
-            # VK codes for A-Z
+            # VK-коды для A-Z
             if 0x41 <= vk <= 0x5A:
                 return chr(vk).lower()
-            # VK codes for 0-9
+            # VK-коды для 0-9
             if 0x30 <= vk <= 0x39:
                 return chr(vk)
     except Exception:
         pass
 
+    # Fallback на символ клавиши
     try:
         if hasattr(key, "char") and key.char:
             return key.char.lower()
@@ -41,7 +53,15 @@ def _normalize_key(key) -> str:
 
 
 def _match_hotkey(pressed: set[str], required: set[str]) -> bool:
-    """Check if pressed keys match required combination (with aliases)."""
+    """Проверяет, что нажатые клавиши соответствуют требуемой комбинации (с учётом псевдонимов).
+
+    Args:
+        pressed: Множество нажатых клавиш.
+        required: Множество клавиш требуемой комбинации.
+
+    Returns:
+        True, если комбинация полностью совпадает.
+    """
     for req in required:
         aliases = _KEY_ALIASES.get(req, {req})
         if not any(alias in pressed for alias in aliases):
@@ -50,12 +70,21 @@ def _match_hotkey(pressed: set[str], required: set[str]) -> bool:
 
 
 class HotkeyController:
+    """Контроллер глобальных горячих клавиш с поддержкой pynput и keyboard."""
+
     def __init__(
         self,
         combination: str = "ctrl+alt+v",
         on_press: Callable | None = None,
         on_release: Callable | None = None,
     ):
+        """Инициализация контроллера.
+
+        Args:
+            combination: Комбинация клавиш в формате "ctrl+alt+v".
+            on_press: Колбэк при нажатии комбинации.
+            on_release: Колбэк при отпускании комбинации.
+        """
         self.combination = combination.lower()
         self.on_press = on_press
         self.on_release = on_release
@@ -67,8 +96,11 @@ class HotkeyController:
         self._active = False
 
     def start(self):
-        # On Windows pynput is more stable (keyboard requires admin rights and
-        # has hook-thread restrictions). On Linux keyboard is usually preferred.
+        """Запускает прослушивание горячей клавиши.
+
+        На Windows предпочитает pynput (не требует прав администратора),
+        на Linux — keyboard. При неудаче пробует fallback-бэкенд.
+        """
         if sys.platform == "win32":
             primary, fallback = self._start_pynput, self._start_keyboard
             primary_name, fallback_name = "pynput", "keyboard"
@@ -93,6 +125,7 @@ class HotkeyController:
                 raise
 
     def stop(self):
+        """Останавливает прослушивание и освобождает хуки."""
         self._listening = False
         self._active = False
         if self._backend == "keyboard":
@@ -109,10 +142,11 @@ class HotkeyController:
                 logger.warning("pynput_stop_failed", error=str(exc))
 
     def _start_keyboard(self):
+        """Запуск через библиотеку keyboard (хуки на уровне ОС)."""
         import keyboard
 
-        # on_press_key expects a single key name, not a combination.
-        # We hook 'v' and check modifiers manually.
+        # on_press_key ожидает одну клавишу, а не комбинацию.
+        # Хукаем 'v' и вручную проверяем модификаторы.
         def on_v_press(_event=None):
             try:
                 if keyboard.is_pressed("ctrl") and keyboard.is_pressed("alt"):
@@ -134,6 +168,7 @@ class HotkeyController:
         self._listening = True
 
     def _start_pynput(self):
+        """Запуск через библиотеку pynput (cross-platform)."""
         from pynput import keyboard as pynput_keyboard
 
         required = set(self.combination.split("+"))
@@ -150,6 +185,7 @@ class HotkeyController:
             was_active = _match_hotkey(self._pynput_pressed, required)
             self._pynput_pressed.discard(k)
             still_active = _match_hotkey(self._pynput_pressed, required)
+            # Отпускаем только если комбинация реально разорвалась
             if was_active and not still_active:
                 self._handle_release()
 
@@ -158,32 +194,34 @@ class HotkeyController:
         self._listening = True
 
     def _handle_press(self):
+        """Внутренний обработчик нажатия (с защитой от дребезга)."""
         if not self._listening or self._active:
             return
         self._active = True
         logger.debug("hotkey_pressed")
         if self.on_press:
-            # Run handler in a separate thread so pynput's Windows hook
-            # callback returns immediately and doesn't freeze input.
+            # Запускаем обработчик в отдельном потоке, чтобы
+            # хук pynput на Windows вернул управление немедленно.
             threading.Thread(target=self._run_press_handler, daemon=True).start()
 
     def _run_press_handler(self):
+        """Безопасный вызов пользовательского on_press с логированием ошибок."""
         try:
             self.on_press()
         except Exception as exc:
             logger.error("hotkey_press_handler_error", error=str(exc))
 
     def _handle_release(self):
+        """Внутренний обработчик отпускания клавиш."""
         if not self._listening:
             return
         self._active = False
         logger.debug("hotkey_released")
         if self.on_release:
-            # Run handler in a separate thread so pynput's Windows hook
-            # callback returns immediately and doesn't freeze input.
             threading.Thread(target=self._run_release_handler, daemon=True).start()
 
     def _run_release_handler(self):
+        """Безопасный вызов пользовательского on_release с логированием ошибок."""
         try:
             self.on_release()
         except Exception as exc:

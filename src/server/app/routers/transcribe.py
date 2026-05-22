@@ -10,11 +10,12 @@ from ..schemas.transcribe import TranscribeResponse
 router = APIRouter(prefix="/api/v1", tags=["transcribe"])
 logger = get_logger()
 
+# URL и настройки сервисов из переменных окружения
 ASR_URL = os.getenv("ASR_URL", "http://asr:8000")
 LLM_URL = os.getenv("LLM_URL", "http://llm:11434")
 DEFAULT_LLM_MODEL = os.getenv("DEFAULT_LLM_MODEL", "llama3.2:3b")
 
-# Prompt template for cleanup
+# Шаблон промпта для постобработки текста через LLM
 CLEANUP_PROMPT = """You are an AI dictation assistant. Clean up the following raw speech transcript.
 Rules:
 - Remove filler words (uh, um, like, you know, ну типа, эм, короче, значит)
@@ -36,6 +37,19 @@ async def _call_asr(
     vad_filter: bool = False,
     hotwords: str | None = None,
 ) -> dict:
+    """Отправляет аудио на ASR-сервис и возвращает результат.
+
+    Args:
+        audio: Сырые байты WAV-файла.
+        language: Код языка.
+        model: Название модели ASR.
+        prompt: Опциональный промпт для распознавания.
+        vad_filter: Фильтрация голосовой активности.
+        hotwords: Горячие слова.
+
+    Returns:
+        JSON-ответ от ASR-сервиса.
+    """
     timeout = httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
         files = {"file": ("audio.wav", audio, "audio/wav")}
@@ -48,6 +62,7 @@ async def _call_asr(
             data["prompt"] = prompt
         if hotwords:
             data["hotwords"] = hotwords
+        # Убираем None-значения, чтобы не отправлять пустые поля
         data = {k: v for k, v in data.items() if v is not None}
 
         response = await client.post(f"{ASR_URL}/v1/audio/transcriptions", files=files, data=data)
@@ -56,6 +71,15 @@ async def _call_asr(
 
 
 async def _call_llm_cleanup(text: str, model: str) -> str:
+    """Отправляет текст на LLM-сервис для постобработки (исправление пунктуации, стиля).
+
+    Args:
+        text: Сырой текст транскрипции.
+        model: Название модели LLM.
+
+    Returns:
+        Очищенный текст.
+    """
     prompt = CLEANUP_PROMPT.format(text=text)
     timeout = httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
@@ -84,18 +108,33 @@ async def transcribe(
     vad_filter: bool = Form(False),
     hotwords: str | None = Form(None),
 ) -> TranscribeResponse:
+    """Основной эндпоинт транскрипции: ASR → опциональная LLM-постобработка.
+
+    Args:
+        file: Загруженный аудиофайл.
+        language: Код языка или "auto".
+        cleanup: Включить LLM-постобработку.
+        model: Модель ASR.
+        prompt: Промпт для ASR.
+        vad_filter: Фильтр VAD.
+        hotwords: Горячие слова.
+
+    Returns:
+        TranscribeResponse с распознанным и очищенным текстом.
+    """
     start_time = time.perf_counter()
     trace_id = os.urandom(8).hex()
 
     logger.info("transcribe_request", trace_id=trace_id, language=language, cleanup=cleanup)
 
+    # Читаем загруженный аудиофайл
     try:
         audio = await file.read()
     except Exception as exc:
         logger.error("audio_read_failed", trace_id=trace_id, error=str(exc))
         raise HTTPException(status_code=400, detail="Failed to read audio file") from exc
 
-    # ASR
+    # Этап 1: ASR
     asr_start = time.perf_counter()
     try:
         asr_result = await _call_asr(
@@ -120,7 +159,7 @@ async def transcribe(
     if not raw_text:
         return TranscribeResponse(success=True, raw="", cleaned="", language=language, processing_ms=0)
 
-    # LLM Cleanup
+    # Этап 2: LLM Cleanup
     cleaned_text = None
     cleanup_skipped = False
     llm_elapsed = 0

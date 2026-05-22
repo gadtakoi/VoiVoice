@@ -1,14 +1,14 @@
 """
-VoiVoice Windows Client — entry point.
+VoiVoice Windows Client — точка входа.
 
-Phases 1-4: voice capture → ASR → LLM cleanup → text injection + polish.
+Фазы 1-4: захват голоса → ASR → постобработка LLM → вставка текста + полировка.
 """
 
 import sys
 from pathlib import Path
 
-# Ensure project root is in sys.path for both `python -m src.client.main`
-# and `python src/client/main.py` launch modes.
+# Добавляем корень проекта в sys.path для обоих режимов запуска:
+# python -m src.client.main  и  python src/client/main.py
 _project_root = Path(__file__).resolve().parents[2]
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
@@ -31,7 +31,10 @@ from src.client.tray import TrayController, TrayState
 
 
 class VoiVoiceClient:
+    """Основной класс клиента: объединяет аудио, горячие клавиши, API и UI."""
+
     def __init__(self):
+        """Инициализация всех компонентов клиента из конфигурации."""
         self.config = Config.from_yaml(Path("config.yaml"))
         self.tray = TrayController(
             on_quit=self._on_quit,
@@ -76,6 +79,7 @@ class VoiVoiceClient:
         self._loop: asyncio.AbstractEventLoop | None = None
 
     def _setup_logging(self):
+        """Настройка логирования: файловый ротационный лог + stdout."""
         log_dir = Path(self.config.logging.directory)
         log_dir.mkdir(parents=True, exist_ok=True)
         log_file = log_dir / "client_{time:YYYY-MM-DD}.log"
@@ -98,11 +102,13 @@ class VoiVoiceClient:
         logger.add(sys.stdout, level=self.config.logging.level)
 
     def _on_quit(self):
+        """Обработчик выхода из приложения через трей."""
         self._running = False
         asyncio.run_coroutine_threadsafe(self.api.close(), asyncio.get_event_loop())
         logger.info("client_quit")
 
     def _on_toggle_pause(self, paused: bool):
+        """Обработчик переключения паузы."""
         if paused:
             self.tray.set_state(TrayState.IDLE)
             self.toast.show("VoiVoice", "⏸️ Приложение приостановлено")
@@ -111,13 +117,16 @@ class VoiVoiceClient:
         logger.info("client_pause_toggled", paused=paused)
 
     def _on_language_change(self, lang: str):
+        """Обработчик смены языка в трее."""
         logger.info("language_changed", language=lang)
 
     def _on_cleanup_change(self, mode: str):
+        """Обработчик смены режима постобработки."""
         self.config.services.cleanup_enabled = mode != "None"
         logger.info("cleanup_mode_changed", mode=mode)
 
     def _on_audio_state_change(self, state: str):
+        """Проксирует состояние аудио в иконку трея."""
         if state == "listening":
             self.tray.set_state(TrayState.LISTENING)
         elif state == "processing":
@@ -126,6 +135,7 @@ class VoiVoiceClient:
             self.tray.set_state(TrayState.IDLE)
 
     def _on_hotkey_press(self):
+        """Нажатие горячей клавиши: начинаем запись."""
         if self.tray.paused or self._processing:
             return
         try:
@@ -141,6 +151,7 @@ class VoiVoiceClient:
             self.toast.show("VoiVoice", f"🎤 Ошибка микрофона: {exc}")
 
     def _on_hotkey_release(self):
+        """Отпускание горячей клавиши: останавливаем запись и обрабатываем."""
         if not self.audio.is_recording:
             return
         try:
@@ -156,12 +167,18 @@ class VoiVoiceClient:
             self.timing.finish()
 
     def _on_max_duration(self, wav_bytes: bytes | None):
+        """Обработчик достижения максимальной длительности записи."""
         logger.warning("max_duration_reached", max_duration_ms=self.config.audio.max_duration_ms)
         self.beacon.stop()
         self.timing.mark("capture_duration")
         self._handle_captured_audio(wav_bytes)
 
     def _handle_captured_audio(self, wav_bytes: bytes | None):
+        """Передаёт захваченное аудио в асинхронный обработчик, если event loop жив.
+
+        Args:
+            wav_bytes: Байты WAV-файла или None.
+        """
         if wav_bytes:
             self._processing = True
             if self._loop is not None and not self._loop.is_closed() and self._running:
@@ -177,15 +194,20 @@ class VoiVoiceClient:
             self.tray.set_state(TrayState.IDLE)
 
     async def _process_audio(self, wav_bytes: bytes):
+        """Полный пайплайн обработки: ASR → LLM cleanup → вставка текста.
+
+        Args:
+            wav_bytes: Байты WAV-файла.
+        """
         start_time = time.perf_counter()
         trace_id = self.timing._current_trace or "unknown"
         try:
             self.timing.mark("vad_process")
             self.timing.mark("encode_wav")
 
+            # Определяем язык: Auto берётся из конфига, иначе — выбор из трея
             language_map = {"Auto": "auto", "RU": "ru", "EN": "en"}
             tray_lang = language_map.get(self.tray.language, "auto")
-            # Use config language unless tray explicitly overrides it
             language = self.config.services.asr_language if tray_lang == "auto" else tray_lang
             cleanup = self.config.services.cleanup_enabled
 
@@ -242,6 +264,7 @@ class VoiVoiceClient:
             self._processing = False
 
     async def _health_loop(self):
+        """Фоновый цикл проверки доступности сервера каждые 10 секунд."""
         while self._running:
             if self.tray.paused:
                 await asyncio.sleep(5)
@@ -267,10 +290,12 @@ class VoiVoiceClient:
             await asyncio.sleep(10)
 
     async def run(self):
+        """Главный цикл клиента: запуск UI, горячих клавиш и health-чеков."""
         self._loop = asyncio.get_running_loop()
         self._setup_logging()
         logger.info("client_starting", version=self.config.app_version)
 
+        # Трей запускаем в отдельном потоке, т.к. pystray блокирует
         tray_thread = threading.Thread(target=self.tray.start, daemon=True)
         tray_thread.start()
         await asyncio.sleep(1)
@@ -297,6 +322,7 @@ class VoiVoiceClient:
 
 
 def main():
+    """Точка входа в приложение."""
     client = VoiVoiceClient()
     try:
         asyncio.run(client.run())

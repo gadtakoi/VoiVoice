@@ -6,11 +6,14 @@ from src.client.api_client import APIClient
 
 @pytest.fixture
 def client():
+    """Фикстура: создаёт экземпляр APIClient для тестов."""
     return APIClient("http://localhost:8080")
 
 
 @pytest.mark.asyncio
 async def test_health_success(respx_mock):
+    """Тест: успешный ответ от эндпоинта /health."""
+    # Мокаем HTTP-ответ через respx
     respx_mock.get("http://localhost:8080/api/v1/health").mock(
         return_value=httpx.Response(200, json={"status": "ok", "services": {}})
     )
@@ -20,6 +23,7 @@ async def test_health_success(respx_mock):
 
 @pytest.mark.asyncio
 async def test_transcribe_success(respx_mock):
+    """Тест: успешная транскрипция аудио через API."""
     respx_mock.post("http://localhost:8080/api/v1/transcribe").mock(
         return_value=httpx.Response(
             200,
